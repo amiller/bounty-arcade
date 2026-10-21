@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseGpx, haversine, profile, stats, project, profileCoords, formatKm, formatM, EARTH_RADIUS_M } from '../logic.js'
+import { parseGpx, haversine, profile, stats, timing, project, profileCoords, formatKm, formatM, formatDuration, EARTH_RADIUS_M } from '../logic.js'
 
 const sample = f => parseGpx(readFileSync(new URL(`../samples/${f}`, import.meta.url), 'utf8'))
 const near = (a, b, tol) => assert.ok(Math.abs(a - b) <= tol, `${a} not within ${tol} of ${b}`)
@@ -90,4 +90,35 @@ test('formatting', () => {
   assert.equal(formatKm(4020.83), '4.02 km')
   assert.equal(formatM(865.1), '865 m')
   assert.equal(formatM(null), '—')
+})
+
+test('parses point times, including offsets, and rejects bad ones', () => {
+  const g = parseGpx(`<gpx><trk><trkseg><trkpt lat="1" lon="2"><ele>3</ele><time> 2026-01-01T01:00:00+01:00 </time></trkpt><trkpt lat="1" lon="2"/></trkseg></trk></gpx>`)
+  assert.deepEqual(g.points, [{ lat: 1, lon: 2, ele: 3, time: Date.UTC(2026, 0, 1) }, { lat: 1, lon: 2, ele: null }])
+  assert.equal('time' in sample('alpine-climb.gpx').points[0], false)
+  assert.throws(() => parseGpx('<trkpt lat="1" lon="2"><time>soon</time></trkpt>'), /bad trkpt/)
+})
+
+test('timing counts only intervals at walking speed or faster', () => {
+  const step = haversine({ lat: 0, lon: 0 }, { lat: 0, lon: 0.001 })
+  const at = (lon, time) => ({ lat: 0, lon, ele: null, time })
+  const slow = 120000 + step / 0.4 * 1000
+  const t = timing([at(0, 0), at(0.001, 60000), at(0.001, 120000), at(0.002, slow), at(0.003, slow + 60000)])
+  near(t.elapsed, slow + 60000, 1e-6)
+  near(t.moving, 120000, 1e-6)
+  near(t.avgSpeed, 3 * step / 120, 1e-6)
+  const fast = timing([at(0, 0), at(0.001, step / 0.6 * 1000)])
+  near(fast.moving, step / 0.6 * 1000, 1e-6)
+  assert.deepEqual(timing([at(0, 0), at(0, 0), at(0, 5000)]), { elapsed: 5000, moving: 0, avgSpeed: null })
+  assert.deepEqual(timing([]), { elapsed: null, moving: null, avgSpeed: null })
+  assert.deepEqual(timing(sample('riverside-loop.gpx').points), { elapsed: null, moving: null, avgSpeed: null })
+})
+
+test('formatDuration', () => {
+  assert.equal(formatDuration(0), '0:00:00')
+  assert.equal(formatDuration(120000), '0:02:00')
+  assert.equal(formatDuration(3723000), '1:02:03')
+  assert.equal(formatDuration(59999), '0:01:00')
+  assert.equal(formatDuration(36000000), '10:00:00')
+  assert.equal(formatDuration(null), '—')
 })

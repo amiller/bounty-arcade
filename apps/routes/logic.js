@@ -11,8 +11,10 @@ export function parseGpx(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+    const time = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
-    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
+    if (time) p.time = Date.parse(time[1])
+    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele)) || (time && !Number.isFinite(p.time))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
@@ -48,6 +50,23 @@ export function stats(points) {
   }
 }
 
+export const MOVING_SPEED_MPS = 0.5
+
+// Elapsed and moving time in ms; avgSpeed is total distance over moving time in m/s. All null unless every point has a time.
+export function timing(points) {
+  if (!points.length || !points.every(p => Number.isFinite(p.time))) return { elapsed: null, moving: null, avgSpeed: null }
+  let moving = 0
+  for (let i = 1; i < points.length; i++) {
+    const dt = points[i].time - points[i - 1].time
+    if (dt > 0 && haversine(points[i - 1], points[i]) / (dt / 1000) >= MOVING_SPEED_MPS) moving += dt
+  }
+  return {
+    elapsed: points.at(-1).time - points[0].time,
+    moving,
+    avgSpeed: moving ? profile(points).at(-1).d / (moving / 1000) : null,
+  }
+}
+
 // Equirectangular projection scaled to fit width x height (minus pad), aspect preserved, north up.
 export function project(points, width, height, pad = 0) {
   const { bbox } = stats(points)
@@ -68,3 +87,8 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+export const formatDuration = ms => {
+  if (ms === null) return '—'
+  const s = Math.round(ms / 1000), pad = n => String(n).padStart(2, '0')
+  return `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`
+}
