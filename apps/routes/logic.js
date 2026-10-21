@@ -7,7 +7,7 @@ const attr = (tag, name) => {
   return Number(m[1])
 }
 
-export function parseGpx(text) {
+function parsePoints(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
@@ -15,9 +15,17 @@ export function parseGpx(text) {
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
+  return points
+}
+
+// One list of points per <trkseg> (empty ones dropped); without <trkseg> tags the whole text is one segment.
+export function parseGpx(text) {
+  const blocks = [...text.matchAll(/<trkseg\b[^>]*?(?:\/>|>([\s\S]*?)<\/trkseg>)/g)].map(m => m[1] ?? '')
+  const segments = (blocks.length ? blocks : [text]).map(parsePoints).filter(s => s.length)
+  const points = segments.flat()
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
   const name = text.match(/<trk>[\s\S]*?<name>([^<]*)<\/name>/)?.[1].trim() ?? null
-  return { name, points }
+  return { name, points, segments }
 }
 
 export function haversine(a, b) {
@@ -25,22 +33,26 @@ export function haversine(a, b) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h))
 }
 
-export function profile(points) {
+// Cumulative distance per point; the gap between segments adds nothing.
+export function profile(points, segments = [points]) {
   let d = 0
-  return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
+  return segments.flatMap(seg => seg.map((p, i) => ({ d: d += i ? haversine(seg[i - 1], p) : 0, ele: p.ele })))
 }
 
-export function stats(points) {
+export function stats(points, { segments = [points] } = {}) {
   const eles = points.map(p => p.ele).filter(e => e !== null)
   let gain = 0, loss = 0
-  for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+  for (const seg of segments) {
+    const se = seg.map(p => p.ele).filter(e => e !== null)
+    for (let i = 1; i < se.length; i++) {
+      const dz = se[i] - se[i - 1]
+      if (dz > 0) gain += dz; else loss -= dz
+    }
   }
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
-    distance: profile(points).at(-1).d,
+    distance: profile(points, segments).at(-1).d,
     gain, loss,
     minEle: eles.length ? Math.min(...eles) : null,
     maxEle: eles.length ? Math.max(...eles) : null,
