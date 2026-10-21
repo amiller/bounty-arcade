@@ -12,6 +12,11 @@ export function parseGpx(text) {
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
+    const time = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
+    if (time) {
+      p.time = Date.parse(time[1])
+      if (!Number.isFinite(p.time)) throw new Error(`bad trkpt time: ${m[0]}`)
+    }
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
@@ -23,6 +28,21 @@ export function parseGpx(text) {
 export function haversine(a, b) {
   const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h))
+}
+
+export function timing(points) {
+  if (points.some(p => !Number.isFinite(p.time))) return { elapsed: null, moving: null, avgSpeed: null }
+  const elapsed = points.at(-1).time - points[0].time
+  let moving = 0, distance = 0
+  for (let i = 1; i < points.length; i++) {
+    const interval = points[i].time - points[i - 1].time
+    const d = haversine(points[i - 1], points[i])
+    if (interval > 0 && d / (interval / 1000) >= 0.5) {
+      moving += interval
+      distance += d
+    }
+  }
+  return { elapsed, moving, avgSpeed: moving > 0 ? distance / (moving / 1000) : null }
 }
 
 export function profile(points) {
@@ -68,3 +88,11 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+export const formatDuration = ms => {
+  if (ms === null || !Number.isFinite(ms)) return '—'
+  const total = Math.floor(ms / 1000)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
