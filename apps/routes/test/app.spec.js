@@ -27,3 +27,21 @@ test('routes loads a sample, switches samples and opens a file', async ({ page }
 
   expect(errors).toEqual([])
 })
+
+test('routes threshold recomputes gain and loss', async ({ page }) => {
+  await page.goto('/apps/routes/')
+  await expect(page.getByTestId('stat-gain')).toHaveText('865 m')
+  await expect(page.getByTestId('threshold')).toHaveValue('0')
+  await page.getByTestId('sample').selectOption('samples/riverside-loop.gpx')
+  await expect(page.getByTestId('stat-gain')).toHaveText('53 m')
+  await expect(page.getByTestId('stat-loss')).toHaveText('53 m')
+
+  await page.getByTestId('threshold').fill('1')
+  await expect(page.getByTestId('stat-gain')).not.toHaveText('53 m')
+  await expect(page.getByTestId('stat-loss')).not.toHaveText('53 m')
+  await expect(page.getByTestId('stat-distance')).toHaveText('9.11 km')
+
+  await page.getByTestId('threshold').fill('0')
+  await expect(page.getByTestId('stat-gain')).toHaveText('53 m')
+  await expect(page.getByTestId('stat-loss')).toHaveText('53 m')
+})
