@@ -23,6 +23,36 @@ function column(id) {
 
 const clone = board => ({ nextId: board.nextId, columns: Object.fromEntries(IDS.map(c => [c, board.columns[c].map(card => ({ ...card }))])) })
 
+// History is session state; only present is saved or exported as a board.
+export const createHistory = board => ({ past: [], present: clone(validate(board)), future: [] })
+
+export function record(history, action) {
+  const present = applyAction(history.present, action)
+  return {
+    past: action.type === 'import' ? [] : [...history.past, history.present].slice(-50),
+    present,
+    future: [],
+  }
+}
+
+export function undo(history) {
+  if (!history.past.length) throw new Error('nothing to undo')
+  return {
+    past: history.past.slice(0, -1),
+    present: history.past.at(-1),
+    future: [history.present, ...history.future],
+  }
+}
+
+export function redo(history) {
+  if (!history.future.length) throw new Error('nothing to redo')
+  return {
+    past: [...history.past, history.present].slice(-50),
+    present: history.future[0],
+    future: history.future.slice(1),
+  }
+}
+
 export function applyAction(board, action) {
   const next = clone(board)
   const cols = next.columns

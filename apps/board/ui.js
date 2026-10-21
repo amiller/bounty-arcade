@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, createHistory, record, undo, redo, emptyBoard, neighbour } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -18,6 +18,7 @@ const db = await new Promise((ok, fail) => {
 const store = mode => db.transaction('kv', mode).objectStore('kv')
 
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
+let history = createHistory(board)
 let editing = null
 let saves = 0
 
@@ -29,9 +30,20 @@ async function save() {
 }
 
 function dispatch(action) {
-  board = applyAction(board, action)
+  return updateHistory(record(history, action))
+}
+
+function updateHistory(next) {
+  history = next
+  board = history.present
+  editing = null
   render()
   return save()
+}
+
+function navigateHistory(direction) {
+  if (!(direction === 'undo' ? history.past : history.future).length) return
+  return updateHistory(direction === 'undo' ? undo(history) : redo(history))
 }
 
 function cardView(col, card, index, count) {
@@ -74,10 +86,22 @@ function columnView([col, title]) {
 }
 
 function render() {
+  $('undo').disabled = !history.past.length
+  $('redo').disabled = !history.future.length
   const focused = document.activeElement?.dataset?.testid
   $('board').replaceChildren(...COLUMNS.map(columnView))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
 }
+
+$('undo').onclick = () => navigateHistory('undo')
+$('redo').onclick = () => navigateHistory('redo')
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'z') return
+  // Leave native text undo available while adding or editing a card.
+  if (e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return
+  e.preventDefault()
+  navigateHistory(e.shiftKey ? 'redo' : 'undo')
+})
 
 $('export').onclick = () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' }))
