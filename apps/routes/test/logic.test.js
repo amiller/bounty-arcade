@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseGpx, haversine, profile, stats, timing, project, profileCoords, formatKm, formatM, formatDuration, EARTH_RADIUS_M } from '../logic.js'
+import { parseGpx, haversine, profile, stats, timing, project, profileCoords, formatKm, formatM, formatDuration, formatSpeed, EARTH_RADIUS_M } from '../logic.js'
 
 const sample = f => parseGpx(readFileSync(new URL(`../samples/${f}`, import.meta.url), 'utf8'))
 const near = (a, b, tol) => assert.ok(Math.abs(a - b) <= tol, `${a} not within ${tol} of ${b}`)
@@ -121,4 +121,13 @@ test('formatDuration', () => {
   assert.equal(formatDuration(59999), '0:01:00')
   assert.equal(formatDuration(36000000), '10:00:00')
   assert.equal(formatDuration(null), '—')
+})
+
+test('formatSpeed', () => {
+  assert.equal(formatSpeed(0.5), '1.8 km/h')
+  assert.equal(formatSpeed(10), '36.0 km/h')
+  assert.equal(formatSpeed(null), '—')
+  const step = haversine({ lat: 0, lon: 0 }, { lat: 0, lon: 0.001 })
+  const at = (lon, time) => ({ lat: 0, lon, ele: null, time })
+  assert.equal(formatSpeed(timing([at(0, 0), at(0.001, 60000), at(0.001, 120000)]).avgSpeed), `${(step / 60 * 3.6).toFixed(1)} km/h`)
 })

@@ -87,6 +87,7 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+export const formatSpeed = mps => mps === null ? '—' : `${(mps * 3.6).toFixed(1)} km/h`
 export const formatDuration = ms => {
   if (ms === null) return '—'
   const s = Math.round(ms / 1000), pad = n => String(n).padStart(2, '0')
