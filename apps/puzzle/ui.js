@@ -4,28 +4,29 @@ const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
 const board = $('board'), select = $('level')
 const keys = { ArrowUp: 'u', ArrowDown: 'd', ArrowLeft: 'l', ArrowRight: 'r', w: 'u', s: 'd', a: 'l', d: 'r' }
-let state, inside
+const KEY = 'puzzle-progress'
+let state, inside, progress = loadProgress()
 
-const STORE = 'puzzle-progress'
-const readProgress = () => {
-  try { const raw = localStorage.getItem(STORE); const p = raw ? JSON.parse(raw) : {}; return p && typeof p === 'object' ? p : {} }
-  catch { return {} }
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || {} } catch { return {} }
 }
-const writeProgress = p => { try { localStorage.setItem(STORE, JSON.stringify(p)) } catch {} }
-let progress = readProgress()
-let lastLevel = Number(localStorage.getItem(STORE + ':last') ?? 0)
 
-const label = (lv, i) => {
-  const best = progress[lv.name]?.best
-  return best === undefined ? `${i + 1}. ${lv.name}` : `${i + 1}. ${lv.name} \u2713 ${best}`
+function saveProgress() {
+  try { localStorage.setItem(KEY, JSON.stringify(progress)) } catch { /* storage unavailable */ }
 }
-const relabel = () => levels.forEach((lv, i) => { select.options[i].text = label(lv, i) })
 
-levels.forEach((lv, i) => select.add(new Option(label(lv, i), i)))
+function label() {
+  levels.forEach((lv, i) => {
+    const p = progress[lv.name]
+    select.options[i].text = `${i + 1}. ${lv.name}` + (p ? ` \u2713 ${p.best}` : '')
+  })
+}
+
+levels.forEach((lv, i) => select.add(new Option(`${i + 1}. ${lv.name}`, i)))
+label()
 
 function load(i) {
   select.value = i
-  try { localStorage.setItem(STORE + ':last', i) } catch {}
   state = parse(levels[i].map)
   inside = interior(state)
   board.style.gridTemplateColumns = `repeat(${state.w}, var(--size))`
@@ -51,11 +52,7 @@ function draw() {
 function step(dir) {
   if (isWon(state)) return
   state = move(state, dir)
-  if (isWon(state)) {
-    progress = recordWin(progress, levels[+select.value].name, moves(state))
-    writeProgress(progress)
-    relabel()
-  }
+  if (isWon(state)) { progress = recordWin(progress, levels[+select.value].name, moves(state)); saveProgress(); label() }
   draw()
 }
 
@@ -72,6 +69,13 @@ document.addEventListener('keydown', e => {
 document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => step(b.dataset.dir)))
 $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
-select.addEventListener('change', () => { load(+select.value); select.blur() })
+select.addEventListener('change', () => {
+  try { localStorage.setItem('puzzle-last-level', String(+select.value)) } catch { /* ignore */ }
+  load(+select.value); select.blur()
+})
 
-load(Number.isInteger(lastLevel) && lastLevel >= 0 && lastLevel < levels.length ? lastLevel : 0)
+addEventListener('beforeunload', () => {
+  try { localStorage.setItem('puzzle-last-level', String(+select.value)) } catch { /* ignore */ }
+})
+
+load(Number(localStorage.getItem('puzzle-last-level') ?? 0) || 0)
