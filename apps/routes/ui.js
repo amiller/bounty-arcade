@@ -47,7 +47,6 @@ function show(text, label) {
   const t = timing(points)
   $('stat-elapsed').textContent = formatDuration(t.elapsed)
   $('stat-moving').textContent = formatDuration(t.moving)
-  $('stat-speed').textContent = t.avgSpeed === null ? '\u2014' : `${(t.avgSpeed * 3.6).toFixed(1)} km/h`
   drawTrack(points)
   drawProfile(points, s)
 }
