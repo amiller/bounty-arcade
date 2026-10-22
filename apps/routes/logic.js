@@ -30,12 +30,24 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points) {
+export function stats(points, { threshold = 0 } = {}) {
+  if (!Number.isFinite(threshold) || threshold < 0) throw new Error('threshold must be a non-negative finite number')
   const eles = points.map(p => p.ele).filter(e => e !== null)
   let gain = 0, loss = 0
+  // The pivot is the initial elevation, then the confirmed trend's latest extreme.
+  // Small reversals leave it unchanged; crossing the threshold counts the whole leg.
+  let pivot = eles[0], direction = 0
   for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+    const dz = eles[i] - pivot
+    if (dz > 0 && (direction === 1 || dz >= threshold)) {
+      gain += dz
+      pivot = eles[i]
+      direction = 1
+    } else if (dz < 0 && (direction === -1 || -dz >= threshold)) {
+      loss -= dz
+      pivot = eles[i]
+      direction = -1
+    }
   }
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
