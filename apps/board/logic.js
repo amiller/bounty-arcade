@@ -21,15 +21,36 @@ function column(id) {
   return id
 }
 
-const clone = board => ({ nextId: board.nextId, columns: Object.fromEntries(IDS.map(c => [c, board.columns[c].map(card => ({ ...card }))])) })
+const clone = board => ({ nextId: board.nextId, columns: Object.fromEntries(IDS.map(c => [c, board.columns[c].map(card => ({ ...card }))])), ...(board.limits ? { limits: { ...board.limits } } : {}) })
+
+const LIMITED = ['doing']
+
+function wipFail(col, n) { throw new Error(`WIP limit: ${col} is full (${n})`) }
+function checkLimit(board, col, count) {
+  const n = board.limits?.[col]
+  if (Number.isInteger(n) && n >= 1 && count > n) wipFail(col, n)
+}
 
 export function applyAction(board, action) {
   const next = clone(board)
   const cols = next.columns
   switch (action.type) {
-    case 'add':
-      cols[column(action.column)].push({ id: `c${next.nextId++}`, text: cleanText(action.text) })
+    case 'add': {
+      const col = column(action.column)
+      checkLimit(next, col, cols[col].length + 1)
+      cols[col].push({ id: `c${next.nextId++}`, text: cleanText(action.text) })
       return next
+    }
+    case 'setLimit': {
+      const col = column(action.column)
+      if (!LIMITED.includes(col)) throw new Error(`no limit on ${col}`)
+      const limit = action.limit
+      if (limit === null || limit === undefined) { delete next.limits; return next }
+      if (!Number.isInteger(limit) || limit < 1) throw new Error('WIP limit must be a positive integer')
+      if (cols[col].length > limit) wipFail(col, limit)
+      next.limits = { ...next.limits, [col]: limit }
+      return next
+    }
     case 'edit':
       findCard(next, action.id).card.text = cleanText(action.text)
       return next
@@ -42,6 +63,7 @@ export function applyAction(board, action) {
     case 'move': {
       const { col, index, card } = findCard(next, action.id)
       const to = column(action.to)
+      if (to !== col) checkLimit(next, to, cols[to].length + 1)
       cols[col].splice(index, 1)
       const at = action.index ?? cols[to].length
       if (!Number.isInteger(at) || at < 0 || at > cols[to].length) throw new Error(`bad index ${at}`)
@@ -74,6 +96,14 @@ export function validate(board) {
       if (seen.has(card.id)) fail(`duplicate card id ${card.id}`)
       seen.add(card.id)
       if (typeof card.text !== 'string' || !card.text.trim()) fail(`card ${card.id} has empty text`)
+    }
+  }
+  if (board.limits !== undefined) {
+    if (!board.limits || typeof board.limits !== 'object' || Array.isArray(board.limits)) fail('bad limits')
+    for (const [col, n] of Object.entries(board.limits)) {
+      if (!LIMITED.includes(col)) fail(`no limit on ${col}`)
+      if (!Number.isInteger(n) || n < 1) fail(`bad limit ${col}=${n}`)
+      if (cols[col].length > n) fail(`${col} has ${cols[col].length} cards over its limit ${n}`)
     }
   }
   return board
