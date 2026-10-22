@@ -1,4 +1,4 @@
-import { makeLevel, initialState, step, terrainAt } from './logic.js'
+import { makeLevel, initialState, step, terrainAt, encodeRun, decodeRun } from './logic.js'
 
 const DT = 1 / 60
 const VIEW_H = 220
@@ -8,15 +8,32 @@ const keys = new Set()
 const bindings = { ArrowUp: ['pitch', 1], KeyW: ['pitch', 1], ArrowDown: ['pitch', -1], KeyS: ['pitch', -1],
   ArrowRight: ['throttle', 1], KeyD: ['throttle', 1], ArrowLeft: ['throttle', -1], KeyA: ['throttle', -1] }
 let state, acc = 0, last = performance.now()
+let recorded = [], playback = null, playbackIndex = 0
 
 function restart() {
-  state = initialState(makeLevel(Number($('seed').value)))
+  const seed = Number($('seed').value)
+  if (!Number.isSafeInteger(seed)) {
+    $('replay-error').textContent = 'Seed must be a safe integer.'
+    return
+  }
+  state = initialState(makeLevel(seed))
+  recorded = []
+  playback = null
+  playbackIndex = 0
+  keys.clear()
   acc = 0
+  last = performance.now()
+  $('replay-error').textContent = ''
+  const url = new URL(location.href)
+  url.searchParams.delete('run')
+  history.replaceState(null, '', url)
 }
 
 function input() {
   const out = { pitch: 0, throttle: 0 }
   for (const k of keys) out[bindings[k][0]] += bindings[k][1]
+  out.pitch = Math.sign(out.pitch)
+  out.throttle = Math.sign(out.throttle)
   return out
 }
 
@@ -101,16 +118,43 @@ function hud() {
   $('status').textContent = state.status
   $('stall').classList.toggle('on', state.stalled)
   canvas.dataset.status = state.status
+  canvas.dataset.replayComplete = String(playback !== null && playbackIndex === playback.length)
+  $('share').href = '?run=' + encodeRun(state.level.seed, recorded)
 }
 
 function frame(now) {
   acc += Math.min(now - last, 100) / 1000
   last = now
-  for (; acc >= DT; acc -= DT) state = step(state, input(), DT)
+  for (; acc >= DT; acc -= DT) {
+    let controls
+    if (playback !== null) {
+      if (playbackIndex >= playback.length) continue
+      controls = playback[playbackIndex++]
+    } else {
+      if (state.status !== 'flying') continue
+      controls = input()
+    }
+    recorded.push({ ...controls })
+    state = step(state, controls, DT)
+  }
   draw()
   hud()
   requestAnimationFrame(frame)
 }
 
+const sharedRun = new URLSearchParams(location.search).get('run')
 restart()
+if (sharedRun !== null) {
+  try {
+    const run = decodeRun(sharedRun)
+    $('seed').value = run.seed
+    state = initialState(makeLevel(run.seed))
+    playback = run.inputs
+    const url = new URL(location.href)
+    url.searchParams.set('run', sharedRun)
+    history.replaceState(null, '', url)
+  } catch {
+    $('replay-error').textContent = 'This run link is invalid. Starting a new flight.'
+  }
+}
 requestAnimationFrame(frame)
