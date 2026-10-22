@@ -11,10 +11,20 @@ function el(name, attrs, text) {
   return e
 }
 
-function drawTrack(points) {
+// One polyline per <trkseg>, so a paused recording draws as separate strokes
+// instead of one line that jumps across the gap.
+function drawTrack(points, segments = [points]) {
   const xy = project(points, 600, 400, 20)
+  let at = 0
+  const lines = []
+  for (const seg of segments) {
+    const n = seg.length
+    if (n > 1) lines.push(el('polyline', { points: pts(xy.slice(at, at + n)) }))
+    else if (n === 1) lines.push(el('circle', { class: 'start', cx: xy[at][0], cy: xy[at][1], r: 3 }))
+    at += n
+  }
   $('track').replaceChildren(
-    el('polyline', { points: pts(xy) }),
+    ...lines,
     el('circle', { class: 'start', cx: xy[0][0], cy: xy[0][1], r: 6 }),
     el('circle', { class: 'end', cx: xy.at(-1)[0], cy: xy.at(-1)[1], r: 4 }),
   )
@@ -35,8 +45,8 @@ function drawProfile(points, s) {
 
 function show(text, label) {
   $('error').textContent = ''
-  const { name, points } = parseGpx(text)
-  const s = stats(points)
+  const { name, points, segments } = parseGpx(text)
+  const s = stats(points, { segments })
   $('route-name').textContent = name ?? label
   $('stat-distance').textContent = formatKm(s.distance)
   $('stat-gain').textContent = formatM(s.gain)
@@ -44,7 +54,7 @@ function show(text, label) {
   $('stat-min').textContent = formatM(s.minEle)
   $('stat-max').textContent = formatM(s.maxEle)
   $('stat-count').textContent = s.count
-  drawTrack(points)
+  drawTrack(points, segments)
   drawProfile(points, s)
 }
 
