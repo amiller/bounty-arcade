@@ -33,6 +33,7 @@
   .tools { display: flex; gap: .25rem; flex-wrap: wrap; }
   .tools button { padding: .1rem .45rem; font-size: .85rem; }
   form { display: flex; gap: .4rem; }
+  #search { font: inherit; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: inherit; min-width: 8rem; }
   form input { flex: 1; min-width: 0; font: inherit; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: inherit; }
 </style>
 </head>
@@ -42,6 +43,7 @@
   <a href="../../">All apps</a>
   <button id="export" data-testid="export">Export JSON</button>
   <label class="file">Import JSON<input id="import" data-testid="import" type="file" accept="application/json,.json"></label>
+  <input id="search" data-testid="search" type="search" autocomplete="off" placeholder="Search cards" aria-label="Search cards">
   <p id="status" data-testid="status" role="alert"></p>
 </header>
 <main id="board" data-testid="board"></main>
