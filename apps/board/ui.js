@@ -20,6 +20,7 @@ const store = mode => db.transaction('kv', mode).objectStore('kv')
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
 let editing = null
 let saves = 0
+const isFull = col => { const n = board.limits?.[col]; return Number.isInteger(n) && n >= 1 && board.columns[col].length >= n }
 
 async function save() {
   const tx = db.transaction('kv', 'readwrite')
@@ -51,7 +52,7 @@ function cardView(col, card, index, count) {
     btn('←', 'left', () => dispatch({ type: 'move', id: card.id, to: left }), !left),
     btn('↑', 'up', () => dispatch({ type: 'move', id: card.id, to: col, index: index - 1 }), index === 0),
     btn('↓', 'down', () => dispatch({ type: 'move', id: card.id, to: col, index: index + 1 }), index === count - 1),
-    btn('→', 'right', () => dispatch({ type: 'move', id: card.id, to: right }), !right),
+    btn('→', 'right', () => dispatch({ type: 'move', id: card.id, to: right }), !right || (right && isFull(right))),
     btn('Edit', 'edit', () => { editing = card.id; render() }),
     btn('Delete', 'delete', () => dispatch({ type: 'delete', id: card.id })),
   ))
@@ -62,7 +63,7 @@ function columnView([col, title]) {
   const cards = board.columns[col]
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
-    input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
+    input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` }, disabled: isFull(col) }))
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
     el('h2', {}, title, el('span', { textContent: cards.length })),
     el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
@@ -94,6 +95,15 @@ $('import').onchange = async e => {
   } catch (err) {
     $('status').textContent = `Import failed: ${err.message}`
   }
+}
+
+$('limit-doing').value = board.limits?.doing ?? ''
+$('limit-doing').onchange = e => {
+  const raw = e.target.value.trim()
+  const limit = raw === '' ? null : Number(raw)
+  if (limit !== null && (!Number.isInteger(limit) || limit < 1)) { render(); return }
+  try { dispatch({ type: 'setLimit', column: 'doing', limit }) }
+  catch (err) { $('status').textContent = err.message }
 }
 
 render()
