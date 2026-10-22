@@ -28,7 +28,6 @@
   [data-dir=d] { grid-column: 2; grid-row: 2; }
   [data-dir=r] { grid-column: 3; grid-row: 2; }
   .hint { font-size: .85rem; opacity: .7; text-align: center; }
-  #share-url { font: inherit; padding: .3rem .5rem; border: 1px solid var(--wall); border-radius: 6px; background: #fff; color: inherit; max-width: 100%; }
 </style>
 </head>
 <body>
@@ -38,10 +37,10 @@
 </header>
 <div class="bar">
   <select id="level" data-testid="level" aria-label="Level"></select>
+  <button id="share" data-testid="share" type="button">Copy link</button>
+  <input id="share-url" data-testid="share-url" readonly>
   <button id="undo" data-testid="undo">Undo</button>
   <button id="restart" data-testid="restart">Restart</button>
-  <button id="share" data-testid="share">Copy link</button>
-  <input id="share-url" data-testid="share-url" readonly aria-label="Share URL" size="28">
   <span>Moves <b id="moves" data-testid="moves">0</b></span>
   <span>Pushes <b id="pushes" data-testid="pushes">0</b></span>
 </div>
