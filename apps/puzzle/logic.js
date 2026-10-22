@@ -58,6 +58,22 @@ export function play(state, lurd) {
   return state
 }
 
+// Indices of boxes that can never move again: on a non-goal cell with a wall
+// on one vertical side and one horizontal side. The map edge counts as a wall,
+// matching how move() blocks pushes off the edge. Sorted ascending.
+export function deadBoxes(state) {
+  const { w, h, walls, goals, boxes } = state
+  const dead = []
+  for (const b of boxes) {
+    if (goals.has(b)) continue
+    const x = b % w, y = Math.floor(b / w)
+    const vert = y === 0 || walls.has(b - w) || y === h - 1 || walls.has(b + w)
+    const horiz = x === 0 || walls.has(b - 1) || x === w - 1 || walls.has(b + 1)
+    if (vert && horiz) dead.push(b)
+  }
+  return dead.sort((a, b) => a - b)
+}
+
 // Cells reachable from the player ignoring boxes: the level's floor, as opposed to the empty outside.
 export function interior(state) {
   const { w, h, walls } = state, seen = new Set([state.player]), todo = [state.player]
