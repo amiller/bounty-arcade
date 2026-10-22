@@ -83,3 +83,21 @@ export function render(state) {
   }
   return rows
 }
+
+
+export function replayUrl(levelIndex, state) {
+  const history = Array.isArray(state?.history) ? state.history.join('') : ''
+  return `#level=${levelIndex}&moves=${history}`
+}
+
+export function parseReplay(hash) {
+  if (typeof hash !== 'string') throw new Error('hash must be string')
+  const clean = hash.startsWith('#') ? hash.slice(1) : hash
+  const params = new URLSearchParams(clean)
+  const levelStr = params.get('level')
+  const moves = params.get('moves')
+  if (levelStr === null || moves === null) throw new Error('missing level or moves')
+  if (!/^\d+$/.test(levelStr)) throw new Error('level must be numeric')
+  if (moves !== '' && !/^[udlr]+$/i.test(moves)) throw new Error('moves must be udlr')
+  return { level: Number(levelStr), moves }
+}
