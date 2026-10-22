@@ -1,4 +1,4 @@
-import { makeLevel, initialState, step, terrainAt } from './logic.js'
+import { makeLevel, initialState, step, terrainAt, encodeRun, decodeRun } from './logic.js'
 
 const DT = 1 / 60
 const VIEW_H = 220
@@ -8,10 +8,48 @@ const keys = new Set()
 const bindings = { ArrowUp: ['pitch', 1], KeyW: ['pitch', 1], ArrowDown: ['pitch', -1], KeyS: ['pitch', -1],
   ArrowRight: ['throttle', 1], KeyD: ['throttle', 1], ArrowLeft: ['throttle', -1], KeyA: ['throttle', -1] }
 let state, acc = 0, last = performance.now()
+let recorded = []        // every input applied to this run, in order
+let replaying = null     // inputs being replayed from ?run=
+let cursor = 0
 
 function restart() {
   state = initialState(makeLevel(Number($('seed').value)))
   acc = 0
+  recorded = []
+  replaying = null
+  cursor = 0
+  share()
+}
+
+function share() {
+  const el = $('share')
+  if (!el) return
+  const str = encodeRun(Number($('seed').value), recorded)
+  el.href = `?run=${str}`
+  el.textContent = `Share run (${recorded.length} steps)`
+}
+
+// Replay mode: the page advances the recorded inputs itself, several per frame
+// so a long run still finishes quickly, with no key presses.
+function startReplay(seed, inputs) {
+  $('seed').value = seed
+  state = initialState(makeLevel(seed))
+  acc = 0
+  recorded = []
+  replaying = inputs
+  cursor = 0
+  share()
+}
+
+const params = new URLSearchParams(location.search)
+const runParam = params.get('run')
+if (runParam) {
+  try {
+    const { seed, inputs } = decodeRun(runParam)
+    startReplay(seed, inputs)
+  } catch (err) {
+    $('status').textContent = `bad run: ${err.message}`
+  }
 }
 
 function input() {
@@ -103,12 +141,26 @@ function hud() {
   canvas.dataset.status = state.status
 }
 
+function advance(inp) {
+  const before = state
+  state = step(state, inp, DT)
+  if (state !== before) recorded.push(inp)
+}
+
 function frame(now) {
   acc += Math.min(now - last, 100) / 1000
   last = now
-  for (; acc >= DT; acc -= DT) state = step(state, input(), DT)
+  if (replaying) {
+    for (; acc >= DT && cursor < replaying.length; acc -= DT) {
+      for (let i = 0; i < 6 && cursor < replaying.length; i++) advance(replaying[cursor++])
+    }
+    if (cursor >= replaying.length) replaying = null
+  } else {
+    for (; acc >= DT; acc -= DT) advance(input())
+  }
   draw()
   hud()
+  if (!replaying && cursor === 0) share()
   requestAnimationFrame(frame)
 }
 
