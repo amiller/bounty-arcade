@@ -25,6 +25,16 @@ export const moves = state => state.history.length
 export const pushes = state => state.history.filter(m => m === m.toUpperCase()).length
 export const isWon = state => state.boxes.every(b => state.goals.has(b))
 
+export function deadBoxes({ w, h, boxes, goals, walls }) {
+  return boxes.filter(box => {
+    if (goals.has(box)) return false
+    const x = box % w, y = Math.floor(box / w)
+    const vertical = (y > 0 && walls.has(box - w)) || (y < h - 1 && walls.has(box + w))
+    const horizontal = (x > 0 && walls.has(box - 1)) || (x < w - 1 && walls.has(box + 1))
+    return vertical && horizontal
+  }).sort((a, b) => a - b)
+}
+
 // Returns the same state object when the move is blocked.
 export function move(state, dir) {
   const d = DIRS[dir]
