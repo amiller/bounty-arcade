@@ -84,17 +84,13 @@ export function render(state) {
   return rows
 }
 
-export function parseReplay(hash) {
-  const raw = String(hash ?? '').replace(/^#/, '')
-  const params = new URLSearchParams(raw)
-  if (!params.has('level') || !params.has('moves')) throw new Error('bad replay link')
-  const level = Number(params.get('level'))
-  if (!Number.isInteger(level) || level < 0) throw new Error('bad replay link')
-  const moves = params.get('moves')
-  if (!/^[lurdLURD]*$/.test(moves)) throw new Error('bad replay link')
-  return { level, moves }
+export function replayUrl(levelIndex, state) {
+  return `#level=${levelIndex}&moves=${state.history.join('')}`
 }
 
-export function replayUrl(levelIndex, state) {
-  return `#level=${levelIndex}&moves=${(state.history || []).join('')}`
+export function parseReplay(hash) {
+  const params = new URLSearchParams(String(hash || '').replace(/^#/, ''))
+  const level = Number(params.get('level')), moves = params.get('moves')
+  if (!Number.isInteger(level) || level < 0 || moves === null || !/^[a-zA-Z]*$/.test(moves)) throw new Error(`bad replay hash '${hash}'`)
+  return { level, moves }
 }
