@@ -78,3 +78,15 @@ export function validate(board) {
   }
   return board
 }
+
+// Search is view state only: it never mutates, reorders or filters the stored board.
+export function filterBoard(board, query) {
+  const q = typeof query === 'string' ? query.trim().toLowerCase() : ''
+  const out = {}
+  for (const [id] of COLUMNS) {
+    const cards = board.columns[id]
+    out[id] = q === '' ? cards.map(card => card.id)
+      : cards.filter(card => card.text.toLowerCase().includes(q)).map(card => card.id)
+  }
+  return out
+}
