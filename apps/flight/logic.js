@@ -8,6 +8,8 @@ export const T_MAX = 4
 export const PITCH_RATE = 1
 export const THROTTLE_RATE = 0.5
 export const CRUISE = 40
+// Full throttle empties the tank in 90 s.
+export const BURN = 1 / 90
 
 export function mulberry32(seed) {
   let a = seed >>> 0
@@ -45,6 +47,7 @@ export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, f
     const ground = Math.max(...[-30, 0, 30].map(d => terrainAt(level, x + d)))
     level.gates.push({ x, y: ground + gap / 2 + 20 + rng() * 60, gap })
   }
+  level.wind = rng() * 24 - 12
   return level
 }
 
@@ -56,17 +59,20 @@ export function terrainAt({ spacing, terrain }, x) {
 
 export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
   const { pitch, throttle } = trim(speed)
-  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
+  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, fuel: 1, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
 }
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
-  const v = Math.hypot(vx, vy)
-  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
+export function forces({ vx, vy, pitch, throttle, fuel = 1, level }) {
+  const wind = (level && level.wind) || 0
+  // Lift and drag act on airspeed; the ground track still integrates ground velocity.
+  const axr = vx - wind
+  const v = Math.hypot(axr, vy)
+  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, axr)), Math.cos(pitch - Math.atan2(vy, axr)))
   const q = K * v * v
-  const lift = q * cl(alpha), drag = q * cd(alpha), thrust = throttle * T_MAX
-  const ux = v ? vx / v : 0, uy = v ? vy / v : 0
+  const lift = q * cl(alpha), drag = q * cd(alpha), thrust = fuel > 0 ? throttle * T_MAX : 0
+  const ux = v ? axr / v : 0, uy = v ? vy / v : 0
   return {
     alpha, lift,
     ax: thrust * Math.cos(pitch) - drag * ux - lift * uy,
@@ -79,10 +85,11 @@ export function step(state, input, dt) {
   if (state.status !== 'flying') return state
   const pitch = state.pitch + (input.pitch || 0) * PITCH_RATE * dt
   const throttle = clamp(state.throttle + (input.throttle || 0) * THROTTLE_RATE * dt, 0, 1)
-  const { ax, ay, alpha } = forces({ ...state, pitch, throttle })
+  const fuel = Math.max(0, (state.fuel ?? 1) - throttle * BURN * dt)
+  const { ax, ay, alpha } = forces({ ...state, pitch, throttle, fuel })
   const vx = state.vx + ax * dt, vy = state.vy + ay * dt
   const x = state.x + vx * dt, y = state.y + vy * dt
-  const s = { ...state, t: state.t + dt, x, y, vx, vy, pitch, throttle, stalled: isStalled(alpha) }
+  const s = { ...state, t: state.t + dt, x, y, vx, vy, pitch, throttle, fuel, stalled: isStalled(alpha) }
   const gate = s.level.gates[s.next]
   if (gate && state.x < gate.x && x >= gate.x) {
     const gy = state.y + (y - state.y) * (gate.x - state.x) / (x - state.x)
@@ -96,67 +103,79 @@ export function step(state, input, dt) {
   return s
 }
 
-// ---- run sharing -------------------------------------------------------
-// Inputs are per-step { pitch, throttle } with each value in {-1, 0, 1}, so a
-// step packs into one value 0..8. Runs are mostly repeats, so they are stored
-// run-length encoded as (value, count) pairs. Every integer is written
-// length-prefixed so the stream stays self-delimiting.
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+// ---- run recording / replay (bounty #5) ----
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+const B64I = Object.fromEntries([...B64].map((c, i) => [c, i]))
 
-const digits = n => {
-  if (!Number.isInteger(n) || n < 0) throw new Error('not a non-negative integer')
+function b64encode(bytes) {
   let out = ''
-  do { out = ALPHABET[n % 64] + out; n = Math.floor(n / 64) } while (n > 0)
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i], b = bytes[i + 1], c = bytes[i + 2]
+    out += B64[a >> 2]
+    out += B64[((a & 3) << 4) | ((b || 0) >> 4)]
+    if (b === undefined) break
+    out += B64[((b & 15) << 2) | ((c || 0) >> 6)]
+    if (c === undefined) break
+    out += B64[c & 63]
+  }
   return out
 }
-const fromDigits = s => {
-  let n = 0
-  for (const ch of s) {
-    const d = ALPHABET.indexOf(ch)
-    if (d < 0) throw new Error(`bad character ${ch}`)
-    n = n * 64 + d
+
+function b64decode(str) {
+  const bytes = []
+  for (let i = 0; i < str.length; i += 4) {
+    const n = [0, 1, 2, 3].map(k => B64I[str[i + k]] ?? 0)
+    bytes.push((n[0] << 2) | (n[1] >> 4))
+    if (str[i + 2] !== undefined) bytes.push(((n[1] & 15) << 4) | (n[2] >> 2))
+    if (str[i + 3] !== undefined) bytes.push(((n[2] & 3) << 6) | n[3])
   }
-  return n
+  return bytes
 }
-// a number is its digit count (1..63) followed by that many base-64 digits
-const encN = n => { const d = digits(n); if (d.length > 63) throw new Error('number too long'); return ALPHABET[d.length] + d }
 
-const pack = ({ pitch, throttle }) => (pitch + 1) * 3 + (throttle + 1)
-const unpack = v => ({ pitch: Math.floor(v / 3) - 1, throttle: v % 3 - 1 })
+const pushVarint = (bytes, value) => {
+  let v = value >>> 0
+  do {
+    let byte = v & 0x7f
+    v >>>= 7
+    if (v) byte |= 0x80
+    bytes.push(byte)
+  } while (v)
+}
 
+function readVarint(bytes, at) {
+  let value = 0, shift = 0, byte
+  do {
+    byte = bytes[at.i++]
+    value += (byte & 0x7f) * 2 ** shift
+    shift += 7
+  } while (byte & 0x80)
+  return value
+}
+
+// inputs: per-step { pitch, throttle } with values in {-1, 0, 1}
 export function encodeRun(seed, inputs) {
-  if (!Number.isInteger(seed) || seed < 0) throw new Error('seed must be a non-negative integer')
-  const parts = [encN(seed)]
+  const bytes = []
+  pushVarint(bytes, seed)
   for (let i = 0; i < inputs.length;) {
-    const v = pack(inputs[i])
-    let n = 1
-    while (i + n < inputs.length && pack(inputs[i + n]) === v) n++
-    parts.push(ALPHABET[v], encN(n))
+    const code = (Math.max(-1, Math.min(1, inputs[i].pitch)) + 1) * 3 + (Math.max(-1, Math.min(1, inputs[i].throttle)) + 1)
+    let n = 0
+    while (i + n < inputs.length && (Math.max(-1, Math.min(1, inputs[i + n].pitch)) + 1) * 3 + (Math.max(-1, Math.min(1, inputs[i + n].throttle)) + 1) === code) n++
+    pushVarint(bytes, n)
+    pushVarint(bytes, code)
     i += n
   }
-  return parts.join('')
+  return b64encode(bytes)
 }
 
 export function decodeRun(str) {
-  if (typeof str !== 'string' || !/^[A-Za-z0-9_-]+$/.test(str)) throw new Error('bad run string')
-  const tokens = str.split('')
-  let i = 0
-  const readN = () => {
-    if (i >= tokens.length) throw new Error('bad run string')
-    const len = ALPHABET.indexOf(tokens[i++])
-    if (len < 1) throw new Error('bad run string')
-    if (i + len > tokens.length) throw new Error('bad run string')
-    const s = tokens.slice(i, i + len).join('')
-    i += len
-    return fromDigits(s)
-  }
-  const seed = readN()
+  const bytes = b64decode(str)
+  const at = { i: 0 }
+  const seed = readVarint(bytes, at)
   const inputs = []
-  while (i < tokens.length) {
-    const v = ALPHABET.indexOf(tokens[i++])
-    if (v < 0 || v > 8) throw new Error('bad run string')
-    const n = readN()
-    for (let k = 0; k < n; k++) inputs.push(unpack(v))
+  while (at.i < bytes.length) {
+    const n = readVarint(bytes, at), code = readVarint(bytes, at)
+    const pitch = Math.floor(code / 3) - 1, throttle = (code % 3) - 1
+    for (let k = 0; k < n; k++) inputs.push({ pitch, throttle })
   }
   return { seed, inputs }
 }
