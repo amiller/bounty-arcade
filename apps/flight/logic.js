@@ -95,3 +95,72 @@ export function step(state, input, dt) {
   if (y <= terrainAt(s.level, x)) s.status = 'crashed'
   return s
 }
+
+// ---- run sharing -------------------------------------------------------
+// Inputs are per-step { pitch, throttle } with each value in {-1, 0, 1}, so a
+// step packs into one value 0..8. Runs are mostly repeats, so they are stored
+// run-length encoded as (value, count) pairs. Every integer is written
+// length-prefixed so the stream stays self-delimiting.
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+
+const digits = n => {
+  if (!Number.isInteger(n) || n < 0) throw new Error('not a non-negative integer')
+  let out = ''
+  do { out = ALPHABET[n % 64] + out; n = Math.floor(n / 64) } while (n > 0)
+  return out
+}
+const fromDigits = s => {
+  let n = 0
+  for (const ch of s) {
+    const d = ALPHABET.indexOf(ch)
+    if (d < 0) throw new Error(`bad character ${ch}`)
+    n = n * 64 + d
+  }
+  return n
+}
+// a number is its digit count (1..63) followed by that many base-64 digits
+const encN = n => { const d = digits(n); if (d.length > 63) throw new Error('number too long'); return ALPHABET[d.length] + d }
+
+const pack = ({ pitch, throttle }) => (pitch + 1) * 3 + (throttle + 1)
+const unpack = v => ({ pitch: Math.floor(v / 3) - 1, throttle: v % 3 - 1 })
+
+export function encodeRun(seed, inputs) {
+  if (!Number.isInteger(seed) || seed < 0) throw new Error('seed must be a non-negative integer')
+  const parts = [encN(seed)]
+  for (let i = 0; i < inputs.length;) {
+    const v = pack(inputs[i])
+    let n = 1
+    while (i + n < inputs.length && pack(inputs[i + n]) === v) n++
+    parts.push(ALPHABET[v], encN(n))
+    i += n
+  }
+  return parts.join('')
+}
+
+export function decodeRun(str) {
+  if (typeof str !== 'string' || !/^[A-Za-z0-9_-]+$/.test(str)) throw new Error('bad run string')
+  const tokens = str.split('')
+  let i = 0
+  const readN = () => {
+    if (i >= tokens.length) throw new Error('bad run string')
+    const len = ALPHABET.indexOf(tokens[i++])
+    if (len < 1) throw new Error('bad run string')
+    if (i + len > tokens.length) throw new Error('bad run string')
+    const s = tokens.slice(i, i + len).join('')
+    i += len
+    return fromDigits(s)
+  }
+  const seed = readN()
+  const inputs = []
+  while (i < tokens.length) {
+    const v = ALPHABET.indexOf(tokens[i++])
+    if (v < 0 || v > 8) throw new Error('bad run string')
+    const n = readN()
+    for (let k = 0; k < n; k++) inputs.push(unpack(v))
+  }
+  return { seed, inputs }
+}
+
+export function replay(seed, inputs, dt) {
+  return inputs.reduce((s, inp) => step(s, inp, dt), initialState(makeLevel(seed)))
+}
