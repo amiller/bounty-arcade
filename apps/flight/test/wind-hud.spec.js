@@ -19,9 +19,13 @@ test('wind HUD matches seeded level values across restart and reload', async ({ 
   }
   await page.getByTestId('seed').fill('1')
   await page.getByTestId('restart').click()
-  const before = await wind.textContent()
+  const expectedAfterReload = await page.evaluate(async () => {
+    const { makeLevel } = await import('/apps/flight/logic.js')
+    return `${Math.round(makeLevel(1).wind)} m/s`
+  })
+  await expect(wind).toHaveText(expectedAfterReload)
   await page.reload()
-  await expect(wind).toHaveText(before)
+  await expect(wind).toHaveText(expectedAfterReload)
   expect(errors).toEqual([])
 })
 
