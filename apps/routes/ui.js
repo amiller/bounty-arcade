@@ -1,4 +1,4 @@
-import { parseGpx, stats, profile, project, profileCoords, formatKm, formatM } from './logic.js'
+import { parseGpx, stats, profile, project, profileCoords, formatKm, formatM, timing, formatDuration } from './logic.js'
 
 const $ = id => document.getElementById(id)
 const NS = 'http://www.w3.org/2000/svg'
@@ -44,6 +44,10 @@ function show(text, label) {
   $('stat-min').textContent = formatM(s.minEle)
   $('stat-max').textContent = formatM(s.maxEle)
   $('stat-count').textContent = s.count
+  const t = timing(points)
+  $('stat-elapsed').textContent = formatDuration(t.elapsed)
+  $('stat-moving').textContent = formatDuration(t.moving)
+  $('stat-speed').textContent = t.avgSpeed === null ? '\u2014' : `${(t.avgSpeed * 3.6).toFixed(1)} km/h`
   drawTrack(points)
   drawProfile(points, s)
 }
