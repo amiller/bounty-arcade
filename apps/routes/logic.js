@@ -7,7 +7,7 @@ const attr = (tag, name) => {
   return Number(m[1])
 }
 
-export function parseGpx(text) {
+function parsePoints(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
@@ -15,9 +15,16 @@ export function parseGpx(text) {
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
+  return points
+}
+
+export function parseGpx(text) {
+  const points = parsePoints(text)
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
+  const blocks = [...text.matchAll(/<trkseg\b[^>]*?(?:\/>|>([\s\S]*?)<\/trkseg>)/g)]
+  const segments = blocks.length ? blocks.map(m => parsePoints(m[1] ?? '')) : [points]
   const name = text.match(/<trk>[\s\S]*?<name>([^<]*)<\/name>/)?.[1].trim() ?? null
-  return { name, points }
+  return { name, points, segments }
 }
 
 export function haversine(a, b) {
@@ -30,17 +37,21 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points) {
+export function stats(points, { segments = [points] } = {}) {
   const eles = points.map(p => p.ele).filter(e => e !== null)
-  let gain = 0, loss = 0
-  for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+  let gain = 0, loss = 0, distance = 0
+  for (const segment of segments) {
+    distance += profile(segment).at(-1)?.d ?? 0
+    const elevations = segment.map(p => p.ele).filter(e => e !== null)
+    for (let i = 1; i < elevations.length; i++) {
+      const dz = elevations[i] - elevations[i - 1]
+      if (dz > 0) gain += dz; else loss -= dz
+    }
   }
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
-    distance: profile(points).at(-1).d,
+    distance,
     gain, loss,
     minEle: eles.length ? Math.min(...eles) : null,
     maxEle: eles.length ? Math.max(...eles) : null,
