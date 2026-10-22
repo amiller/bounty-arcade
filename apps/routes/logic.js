@@ -30,14 +30,46 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points, { threshold = 0 } = {}) {
+// Hysteresis: a climb or descent only counts once elevation has moved `threshold`
+// from the last counted turning point, and then keeps extending until it reverses
+// by `threshold` from the extreme.
+function elevationChange(eles, threshold) {
+  if (eles.length < 2) return { gain: 0, loss: 0 }
+  let gain = 0, loss = 0, anchor = eles[0], extreme = eles[0], mode = null
+  const close = () => {
+    if (mode === 'up') gain += extreme - anchor
+    else if (mode === 'down') loss += anchor - extreme
+    anchor = extreme
+    mode = null
+  }
+  for (const ele of eles.slice(1)) {
+    if (mode === 'up' && ele > extreme) extreme = ele
+    else if (mode === 'down' && ele < extreme) extreme = ele
+    if (mode === 'up' && ele <= extreme - threshold) { close(); extreme = ele }
+    else if (mode === 'down' && ele >= extreme + threshold) { close(); extreme = ele }
+    if (mode === null) {
+      if (ele >= anchor + threshold) { mode = 'up'; extreme = ele }
+      else if (ele <= anchor - threshold) { mode = 'down'; extreme = ele }
+    }
+  }
+  if (mode !== null) close()
+  return { gain, loss }
+}
+
+export function stats(points, { segments = [points], threshold = 0 } = {}) {
+  const segs = segments && segments.length ? segments : [points]
+  let distance = 0, gain = 0, loss = 0
+  for (const seg of segs) {
+    for (let i = 1; i < seg.length; i++) distance += haversine(seg[i - 1], seg[i])
+    const { gain: g, loss: l } = elevationChange(seg.map(p => p.ele).filter(e => e !== null), threshold)
+    gain += g
+    loss += l
+  }
   const eles = points.map(p => p.ele).filter(e => e !== null)
-  const { gain, loss } = gainLoss(eles, threshold)
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
-    distance: profile(points).at(-1).d,
-    gain, loss,
+    distance, gain, loss,
     minEle: eles.length ? Math.min(...eles) : null,
     maxEle: eles.length ? Math.max(...eles) : null,
     bbox: { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) },
@@ -64,34 +96,3 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
-
-// ---- shared: gain/loss with an optional hysteresis threshold -------------
-export function gainLoss(eles, threshold = 0) {
-  let gain = 0, loss = 0
-  if (eles.length < 2) return { gain, loss }
-  if (!(threshold > 0)) {
-    for (let i = 1; i < eles.length; i++) {
-      const dz = eles[i] - eles[i - 1]
-      if (dz > 0) gain += dz; else loss -= dz
-    }
-    return { gain, loss }
-  }
-  // Count a climb only once elevation has risen `threshold` above the last
-  // turning point; the climb then keeps extending while elevation rises and
-  // ends when it falls `threshold` below its high point. Descents mirror it.
-  let ref = eles[0], mode = 0, extreme = eles[0]
-  for (let i = 1; i < eles.length; i++) {
-    const e = eles[i]
-    if (mode === 1) {
-      if (e > extreme) extreme = e
-      else if (extreme - e >= threshold) { gain += extreme - ref; ref = extreme; mode = -1; extreme = e }
-    } else if (mode === -1) {
-      if (e < extreme) extreme = e
-      else if (e - extreme >= threshold) { loss += ref - extreme; ref = extreme; mode = 1; extreme = e }
-    } else if (e - ref >= threshold) { mode = 1; extreme = e }
-    else if (ref - e >= threshold) { mode = -1; extreme = e }
-  }
-  if (mode === 1) gain += extreme - ref
-  else if (mode === -1) loss += ref - extreme
-  return { gain, loss }
-}
