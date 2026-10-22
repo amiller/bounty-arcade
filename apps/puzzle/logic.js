@@ -83,3 +83,13 @@ export function render(state) {
   }
   return rows
 }
+
+
+export function recordWin(progress = {}, levelName, moves) {
+  const current = progress[levelName]
+  const best = current?.best !== undefined ? Math.min(current.best, moves) : moves
+  return {
+    ...progress,
+    [levelName]: { ...current, best },
+  }
+}
