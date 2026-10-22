@@ -84,18 +84,13 @@ export function render(state) {
   return rows
 }
 
-// A box that is not on a goal and has a wall on one vertical and one
-// horizontal side can never move again: every push needs the far side free.
+// A box on a non-goal cell with a wall on one vertical and one horizontal side can never move again.
 export function deadBoxes(state) {
   const { w, h, walls, goals, boxes } = state
   const wall = (x, y) => x < 0 || x >= w || y < 0 || y >= h || walls.has(y * w + x)
-  const dead = []
-  boxes.forEach((b, i) => {
-    if (goals.has(b)) return
+  return boxes.filter(b => {
+    if (goals.has(b)) return false
     const x = b % w, y = Math.floor(b / w)
-    const vert = wall(x, y - 1) || wall(x, y + 1)
-    const horiz = wall(x - 1, y) || wall(x + 1, y)
-    if (vert && horiz) dead.push(b)
-  })
-  return dead.sort((a, b) => a - b)
+    return (wall(x - 1, y) || wall(x + 1, y)) && (wall(x, y - 1) || wall(x, y + 1))
+  }).sort((a, b) => a - b)
 }
