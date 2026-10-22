@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, neighbour, createHistory, record, undo, redo } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -20,6 +20,7 @@ const store = mode => db.transaction('kv', mode).objectStore('kv')
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
 let editing = null
 let saves = 0
+let history = createHistory(board)
 
 async function save() {
   const tx = db.transaction('kv', 'readwrite')
@@ -29,7 +30,15 @@ async function save() {
 }
 
 function dispatch(action) {
-  board = applyAction(board, action)
+  history = record(history, action)
+  board = history.present
+  render()
+  return save()
+}
+
+function step(fn) {
+  try { history = fn(history) } catch { return }
+  board = history.present
   render()
   return save()
 }
@@ -77,6 +86,8 @@ function render() {
   const focused = document.activeElement?.dataset?.testid
   $('board').replaceChildren(...COLUMNS.map(columnView))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
+  $('undo').disabled = !history.past.length
+  $('redo').disabled = !history.future.length
 }
 
 $('export').onclick = () => {
@@ -95,6 +106,14 @@ $('import').onchange = async e => {
     $('status').textContent = `Import failed: ${err.message}`
   }
 }
+
+$('undo').onclick = () => step(undo)
+$('redo').onclick = () => step(redo)
+addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
+  e.preventDefault()
+  e.shiftKey ? step(redo) : step(undo)
+})
 
 render()
 $('board').dataset.ready = 'true'
