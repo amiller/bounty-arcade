@@ -84,9 +84,9 @@ export function render(state) {
   return rows
 }
 
+// Pure bookkeeping: returns a new progress object and never mutates the input.
 export function recordWin(progress, levelName, moves) {
   const prev = progress[levelName]
-  const best = prev && Number.isFinite(prev.best) ? Math.min(prev.best, moves) : moves
-  if (prev && prev.best === best) return progress
+  const best = prev ? Math.min(prev.best, moves) : moves
   return { ...progress, [levelName]: { ...prev, best } }
 }
