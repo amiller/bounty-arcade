@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, neighbour, filterBoard } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -20,6 +20,7 @@ const store = mode => db.transaction('kv', mode).objectStore('kv')
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
 let editing = null
 let saves = 0
+let query = ''
 
 async function save() {
   const tx = db.transaction('kv', 'readwrite')
@@ -34,9 +35,13 @@ function dispatch(action) {
   return save()
 }
 
-function cardView(col, card, index, count) {
+function cardView(col, card, index, count, isFiltering, matchedIds) {
   const btn = (label, action, onclick, disabled = false) => el('button', { textContent: label, title: action, onclick, disabled, type: 'button', dataset: { action } })
   const li = el('li', { className: 'card', draggable: true, dataset: { testid: 'card', id: card.id } })
+  if (isFiltering && !matchedIds.has(card.id)) {
+    li.hidden = true
+    li.style.display = 'none'
+  }
   li.ondragstart = e => e.dataTransfer.setData('text/plain', card.id)
   if (editing === card.id) {
     const input = el('input', { value: card.text, dataset: { testid: 'edit-input' } })
@@ -60,12 +65,18 @@ function cardView(col, card, index, count) {
 
 function columnView([col, title]) {
   const cards = board.columns[col]
+  const isFiltering = Boolean(query.trim())
+  const matches = isFiltering ? filterBoard(board, query) : null
+  const matchedIds = matches ? new Set(matches[col]) : null
+
+  const countText = isFiltering ? `${matchedIds.size}/${cards.length}` : `${cards.length}`
+
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
     input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
-    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
+    el('h2', {}, title, el('span', { textContent: countText })),
+    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length, isFiltering, matchedIds))),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
@@ -76,7 +87,16 @@ function columnView([col, title]) {
 function render() {
   const focused = document.activeElement?.dataset?.testid
   $('board').replaceChildren(...COLUMNS.map(columnView))
-  if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
+  if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`)?.focus()
+}
+
+const searchInput = $('search')
+if (searchInput) {
+  searchInput.value = ''
+  searchInput.oninput = e => {
+    query = e.target.value
+    render()
+  }
 }
 
 $('export').onclick = () => {
