@@ -45,6 +45,7 @@ export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, f
     const ground = Math.max(...[-30, 0, 30].map(d => terrainAt(level, x + d)))
     level.gates.push({ x, y: ground + gap / 2 + 20 + rng() * 60, gap })
   }
+  level.wind = -12 + rng() * 24
   return level
 }
 
@@ -61,12 +62,13 @@ export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
-  const v = Math.hypot(vx, vy)
-  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
+export function forces({ vx, vy, pitch, throttle, level, wind = level?.wind ?? 0 }) {
+  const wax = vx - wind
+  const v = Math.hypot(wax, vy)
+  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, wax)), Math.cos(pitch - Math.atan2(vy, wax)))
   const q = K * v * v
   const lift = q * cl(alpha), drag = q * cd(alpha), thrust = throttle * T_MAX
-  const ux = v ? vx / v : 0, uy = v ? vy / v : 0
+  const ux = v ? wax / v : 0, uy = v ? vy / v : 0
   return {
     alpha, lift,
     ax: thrust * Math.cos(pitch) - drag * ux - lift * uy,
