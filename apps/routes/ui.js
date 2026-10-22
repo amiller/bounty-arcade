@@ -11,17 +11,15 @@ function el(name, attrs, text) {
   return e
 }
 
-// One polyline per <trkseg>, so a paused recording draws as separate strokes
-// instead of one line that jumps across the gap.
-function drawTrack(points, segments = [points]) {
+function drawTrack(points, segments) {
   const xy = project(points, 600, 400, 20)
-  let at = 0
+  const segs = segments && segments.length ? segments : [points]
   const lines = []
-  for (const seg of segments) {
-    const n = seg.length
-    if (n > 1) lines.push(el('polyline', { points: pts(xy.slice(at, at + n)) }))
-    else if (n === 1) lines.push(el('circle', { class: 'start', cx: xy[at][0], cy: xy[at][1], r: 3 }))
-    at += n
+  let at = 0
+  for (const seg of segs) {
+    const part = xy.slice(at, at + seg.length)
+    at += seg.length
+    if (part.length > 1) lines.push(el('polyline', { points: pts(part) }))
   }
   $('track').replaceChildren(
     ...lines,
