@@ -83,3 +83,10 @@ export function render(state) {
   }
   return rows
 }
+
+export function recordWin(progress, levelName, moves) {
+  const prev = progress[levelName]
+  const best = prev && Number.isFinite(prev.best) ? Math.min(prev.best, moves) : moves
+  if (prev && prev.best === best) return progress
+  return { ...progress, [levelName]: { ...prev, best } }
+}
