@@ -36,7 +36,8 @@ function drawProfile(points, s) {
 function show(text, label) {
   $('error').textContent = ''
   const { name, points } = parseGpx(text)
-  const s = stats(points)
+  current = { text, label }
+  const s = stats(points, { threshold: threshold() })
   $('route-name').textContent = name ?? label
   $('stat-distance').textContent = formatKm(s.distance)
   $('stat-gain').textContent = formatM(s.gain)
@@ -50,12 +51,17 @@ function show(text, label) {
 
 const report = e => { $('error').textContent = e.message; throw e }
 
+const threshold = () => Math.max(0, Number($('threshold').value) || 0)
+
+let current = null
+
 async function loadSample() {
   const res = await fetch($('sample').value)
   if (!res.ok) throw new Error(`${res.status} fetching ${$('sample').value}`)
   show(await res.text(), $('sample').selectedOptions[0].text)
 }
 
+$('threshold').addEventListener('input', () => { if (current !== null) show(current.text, current.label) })
 $('sample').addEventListener('change', () => loadSample().catch(report))
 $('file').addEventListener('change', async () => {
   const f = $('file').files[0]
