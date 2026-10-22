@@ -33,6 +33,8 @@ export function trim(v) {
   return { pitch: alpha, throttle: thrust / T_MAX }
 }
 
+export const WIND_MAX = 12
+
 export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, firstGate = 300, gap = 30 } = {}) {
   const rng = mulberry32(seed)
   const length = firstGate + gateSpacing * gates + 300
@@ -45,6 +47,7 @@ export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, f
     const ground = Math.max(...[-30, 0, 30].map(d => terrainAt(level, x + d)))
     level.gates.push({ x, y: ground + gap / 2 + 20 + rng() * 60, gap })
   }
+  level.wind = rng() * 2 * WIND_MAX - WIND_MAX
   return level
 }
 
@@ -61,12 +64,17 @@ export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
-  const v = Math.hypot(vx, vy)
-  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
+// Lift and drag act on airspeed: the air itself moves at `wind` along +x,
+// so the air-relative velocity is (vx - wind, vy). Position still integrates
+// the ground velocity, which is what the state stores.
+export function forces({ vx, vy, pitch, throttle, wind = 0 }) {
+  const airX = vx - wind
+  const v = Math.hypot(airX, vy)
+  const heading = Math.atan2(vy, airX)
+  const alpha = Math.atan2(Math.sin(pitch - heading), Math.cos(pitch - heading))
   const q = K * v * v
   const lift = q * cl(alpha), drag = q * cd(alpha), thrust = throttle * T_MAX
-  const ux = v ? vx / v : 0, uy = v ? vy / v : 0
+  const ux = v ? airX / v : 0, uy = v ? vy / v : 0
   return {
     alpha, lift,
     ax: thrust * Math.cos(pitch) - drag * ux - lift * uy,
@@ -79,7 +87,7 @@ export function step(state, input, dt) {
   if (state.status !== 'flying') return state
   const pitch = state.pitch + (input.pitch || 0) * PITCH_RATE * dt
   const throttle = clamp(state.throttle + (input.throttle || 0) * THROTTLE_RATE * dt, 0, 1)
-  const { ax, ay, alpha } = forces({ ...state, pitch, throttle })
+  const { ax, ay, alpha } = forces({ ...state, pitch, throttle, wind: state.level.wind ?? 0 })
   const vx = state.vx + ax * dt, vy = state.vy + ay * dt
   const x = state.x + vx * dt, y = state.y + vy * dt
   const s = { ...state, t: state.t + dt, x, y, vx, vy, pitch, throttle, stalled: isStalled(alpha) }
