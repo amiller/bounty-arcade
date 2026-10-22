@@ -31,9 +31,9 @@ function draw() {
   $('moves').textContent = moves(state)
   $('pushes').textContent = pushes(state)
   const last = +select.value === levels.length - 1
-  $('status').textContent = isWon(state)
-    ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.')
-    : dead.length ? 'Stuck: a box is in a corner' : ''
+  if (isWon(state)) $('status').textContent = last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.'
+  else if (dead.length) $('status').textContent = 'Stuck: a box is in a corner'
+  else $('status').textContent = ''
 }
 
 function step(dir) {
