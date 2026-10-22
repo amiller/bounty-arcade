@@ -7,59 +7,28 @@ const attr = (tag, name) => {
   return Number(m[1])
 }
 
-const trkpts = scope => {
-  const out = []
-  for (const m of scope.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
-    const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
-    const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
-    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
-    out.push(p)
+const trkptFrom = m => {
+  const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+  const time = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
+  const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
+  if (time) {
+    const ms = Date.parse(time[1].trim())
+    if (Number.isFinite(ms)) p.time = ms
   }
-  return out
+  if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
+  return p
 }
 
-// A paused recording or a ferry crossing is several <trkseg> blocks: `points`
-// stays the flat list, `segments` keeps them apart so distance and gain never
-// count the straight line across a gap.
 export function parseGpx(text) {
-  const blocks = [...text.matchAll(/<trkseg\b[^>]*>([\s\S]*?)<\/trkseg>/g)].map(m => m[1])
-  const segments = (blocks.length ? blocks : [text]).map(trkpts).filter(seg => seg.length)
-  const points = segments.flat()
+  const segments = [], points = []
+  const push = seg => { if (seg.length) { segments.push(seg); points.push(...seg) } }
+  for (const sm of text.matchAll(/<trkseg\b[^>]*>([\s\S]*?)<\/trkseg>/g))
+    push([...sm[1].matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)].map(trkptFrom))
+  if (!segments.length) push([...text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)].map(trkptFrom))
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
   const name = text.match(/<trk>[\s\S]*?<name>([^<]*)<\/name>/)?.[1].trim() ?? null
   return { name, points, segments }
 }
-// ---- shared: gain/loss with an optional hysteresis threshold -------------
-export function gainLoss(eles, threshold = 0) {
-  let gain = 0, loss = 0
-  if (eles.length < 2) return { gain, loss }
-  if (!(threshold > 0)) {
-    for (let i = 1; i < eles.length; i++) {
-      const dz = eles[i] - eles[i - 1]
-      if (dz > 0) gain += dz; else loss -= dz
-    }
-    return { gain, loss }
-  }
-  // Count a climb only once elevation has risen `threshold` above the last
-  // turning point; the climb then keeps extending while elevation rises and
-  // ends when it falls `threshold` below its high point. Descents mirror it.
-  let ref = eles[0], mode = 0, extreme = eles[0]
-  for (let i = 1; i < eles.length; i++) {
-    const e = eles[i]
-    if (mode === 1) {
-      if (e > extreme) extreme = e
-      else if (extreme - e >= threshold) { gain += extreme - ref; ref = extreme; mode = -1; extreme = e }
-    } else if (mode === -1) {
-      if (e < extreme) extreme = e
-      else if (e - extreme >= threshold) { loss += ref - extreme; ref = extreme; mode = 1; extreme = e }
-    } else if (e - ref >= threshold) { mode = 1; extreme = e }
-    else if (ref - e >= threshold) { mode = -1; extreme = e }
-  }
-  if (mode === 1) gain += extreme - ref
-  else if (mode === -1) loss += ref - extreme
-  return { gain, loss }
-}
-
 
 export function haversine(a, b) {
   const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2
@@ -71,21 +40,46 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points, { segments = [points], threshold = 0 } = {}) {
-  const eles = points.map(p => p.ele).filter(e => e !== null)
-  let distance = 0, gain = 0, loss = 0
-  for (const seg of segments) {
-    if (!seg.length) continue
-    distance += profile(seg).at(-1).d
-    const g = gainLoss(seg.map(p => p.ele).filter(e => e !== null), threshold)
-    gain += g.gain
-    loss += g.loss
+// Hysteresis: a climb or descent only counts once elevation has moved `threshold`
+// from the last counted turning point, and then keeps extending until it reverses
+// by `threshold` from the extreme.
+function elevationChange(eles, threshold) {
+  if (eles.length < 2) return { gain: 0, loss: 0 }
+  let gain = 0, loss = 0, anchor = eles[0], extreme = eles[0], mode = null
+  const close = () => {
+    if (mode === 'up') gain += extreme - anchor
+    else if (mode === 'down') loss += anchor - extreme
+    anchor = extreme
+    mode = null
   }
+  for (const ele of eles.slice(1)) {
+    if (mode === 'up' && ele > extreme) extreme = ele
+    else if (mode === 'down' && ele < extreme) extreme = ele
+    if (mode === 'up' && ele <= extreme - threshold) { close(); extreme = ele }
+    else if (mode === 'down' && ele >= extreme + threshold) { close(); extreme = ele }
+    if (mode === null) {
+      if (ele >= anchor + threshold) { mode = 'up'; extreme = ele }
+      else if (ele <= anchor - threshold) { mode = 'down'; extreme = ele }
+    }
+  }
+  if (mode !== null) close()
+  return { gain, loss }
+}
+
+export function stats(points, { segments = [points], threshold = 0 } = {}) {
+  const segs = segments && segments.length ? segments : [points]
+  let distance = 0, gain = 0, loss = 0
+  for (const seg of segs) {
+    for (let i = 1; i < seg.length; i++) distance += haversine(seg[i - 1], seg[i])
+    const { gain: g, loss: l } = elevationChange(seg.map(p => p.ele).filter(e => e !== null), threshold)
+    gain += g
+    loss += l
+  }
+  const eles = points.map(p => p.ele).filter(e => e !== null)
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
-    distance,
-    gain, loss,
+    distance, gain, loss,
     minEle: eles.length ? Math.min(...eles) : null,
     maxEle: eles.length ? Math.max(...eles) : null,
     bbox: { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) },
