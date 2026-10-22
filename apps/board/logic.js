@@ -78,3 +78,24 @@ export function validate(board) {
   }
   return board
 }
+
+export const HISTORY_LIMIT = 50
+
+export const createHistory = board => ({ past: [], present: board, future: [] })
+
+export function record(h, action) {
+  const present = applyAction(h.present, action)
+  if (action.type === 'import') return createHistory(present)
+  return { past: [...h.past, h.present].slice(-HISTORY_LIMIT), present, future: [] }
+}
+
+export function undo(h) {
+  if (!h.past.length) throw new Error('nothing to undo')
+  return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] }
+}
+
+export function redo(h) {
+  if (!h.future.length) throw new Error('nothing to redo')
+  const [present, ...future] = h.future
+  return { past: [...h.past, h.present], present, future }
+}
