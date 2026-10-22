@@ -30,31 +30,35 @@ function draw() {
   $('pushes').textContent = pushes(state)
   const last = +select.value === levels.length - 1
   $('status').textContent = isWon(state) ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.') : ''
+  shareUrl()
 }
+
+function shareUrl() {
+  const url = location.origin + location.pathname + replayUrl(+select.value, state)
+  if ($('share-url')) $('share-url').value = url
+  return url
+}
+
+function replay(hash) {
+  const { level, moves: lurd } = parseReplay(hash)
+  load(level)
+  for (const c of lurd) {
+    const next = move(state, c.toLowerCase())
+    if (next === state) { $('status').textContent = `Replay blocked at step ${moves(state)} (${c})`; draw(); return }
+    state = next
+  }
+  draw()
+}
+
+if ($('share')) $('share').addEventListener('click', async () => {
+  shareUrl()
+  try { await navigator.clipboard.writeText($('share-url').value) } catch { /* clipboard unavailable */ }
+  $('share-url').select()
+})
 
 function step(dir) {
   if (isWon(state)) return
-  const next = move(state, dir)
-  const blocked = next === state
-  state = next
-  draw()
-  if (blocked) $('status').textContent = 'move blocked'
-}
-
-function share() {
-  const url = `${location.origin}${location.pathname}${replayUrl(+select.value, state)}`
-  $('share-url').value = url
-  $('share').href = replayUrl(+select.value, state)
-}
-
-// Replays a LURD string move by move; a blocked move stops the replay and says
-// which step failed, so a bad link never silently produces a different board.
-function replayMoves(lurd) {
-  for (let i = 0; i < lurd.length; i++) {
-    const next = move(state, lurd[i].toLowerCase())
-    if (next === state) { draw(); $('status').textContent = `move blocked at step ${i + 1}`; return }
-    state = next
-  }
+  state = move(state, dir)
   draw()
 }
 
@@ -71,15 +75,8 @@ document.addEventListener('keydown', e => {
 document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => step(b.dataset.dir)))
 $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
-$('share').addEventListener('click', e => { share(); e.preventDefault() })
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
-load(0)
-try {
-  const { level, moves: lurd } = parseReplay(location.hash)
-  if (level < levels.length) { load(level); replayMoves(lurd) }
-  else $('status').textContent = `No level ${level}`
-} catch (err) {
-  if (location.hash) $('status').textContent = `Bad replay link: ${err.message}`
-}
-share()
+const hash = location.hash
+if (hash) replay(hash)
+else load(0)
