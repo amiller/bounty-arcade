@@ -12,6 +12,12 @@ export function parseGpx(text) {
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
+    const time = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
+    if (time) {
+      const ms = Date.parse(time[1])
+      if (Number.isNaN(ms)) throw new Error(`bad time: ${time[1]}`)
+      p.time = ms
+    }
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
@@ -64,6 +70,31 @@ export function profileCoords(prof, width, height, pad = 0) {
   const eles = pts.map(p => p.ele), lo = Math.min(...eles), span = Math.max(...eles) - lo || 1
   const dist = prof.at(-1).d || 1
   return pts.map(p => [pad + p.d / dist * (width - 2 * pad), height - pad - (p.ele - lo) / span * (height - 2 * pad)])
+}
+
+// Moving time sums only the intervals fast enough to be actual movement, so a
+// long lunch stop does not drag the average down. Everything is null unless
+// every point carries a time.
+export const MOVING_MIN_SPEED = 0.5
+
+export function timing(points) {
+  const none = { elapsed: null, moving: null, avgSpeed: null }
+  if (points.length < 2 || points.some(p => !('time' in p) || !Number.isFinite(p.time))) return none
+  const elapsed = points.at(-1).time - points[0].time
+  let moving = 0, distance = 0
+  for (let i = 1; i < points.length; i++) {
+    const dt = (points[i].time - points[i - 1].time) / 1000, d = haversine(points[i - 1], points[i])
+    distance += d
+    if (dt > 0 && d / dt >= MOVING_MIN_SPEED) moving += points[i].time - points[i - 1].time
+  }
+  return { elapsed, moving, avgSpeed: moving > 0 ? distance / (moving / 1000) : 0 }
+}
+
+export function formatDuration(ms) {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '\u2014'
+  const total = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
