@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, replayUrl, parseReplay } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -34,7 +34,27 @@ function draw() {
 
 function step(dir) {
   if (isWon(state)) return
-  state = move(state, dir)
+  const next = move(state, dir)
+  const blocked = next === state
+  state = next
+  draw()
+  if (blocked) $('status').textContent = 'move blocked'
+}
+
+function share() {
+  const url = `${location.origin}${location.pathname}${replayUrl(+select.value, state)}`
+  $('share-url').value = url
+  $('share').href = replayUrl(+select.value, state)
+}
+
+// Replays a LURD string move by move; a blocked move stops the replay and says
+// which step failed, so a bad link never silently produces a different board.
+function replayMoves(lurd) {
+  for (let i = 0; i < lurd.length; i++) {
+    const next = move(state, lurd[i].toLowerCase())
+    if (next === state) { draw(); $('status').textContent = `move blocked at step ${i + 1}`; return }
+    state = next
+  }
   draw()
 }
 
@@ -51,6 +71,15 @@ document.addEventListener('keydown', e => {
 document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => step(b.dataset.dir)))
 $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
+$('share').addEventListener('click', e => { share(); e.preventDefault() })
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
 load(0)
+try {
+  const { level, moves: lurd } = parseReplay(location.hash)
+  if (level < levels.length) { load(level); replayMoves(lurd) }
+  else $('status').textContent = `No level ${level}`
+} catch (err) {
+  if (location.hash) $('status').textContent = `Bad replay link: ${err.message}`
+}
+share()
