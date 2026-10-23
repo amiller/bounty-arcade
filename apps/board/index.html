@@ -20,6 +20,7 @@
   .file input { display: none; }
   #status { width: 100%; margin: 0; color: #c0392b; }
   #status:empty { display: none; }
+  #search { font: inherit; padding: .3rem .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: inherit; }
   #board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; padding: 0 1rem 1rem; }
   @media (max-width: 640px) { #board { grid-template-columns: 1fr; } }
   .column { background: var(--panel); border-radius: 10px; padding: .75rem; min-height: 8rem; }
@@ -43,6 +44,7 @@
   <button id="export" data-testid="export">Export JSON</button>
   <label class="file">Import JSON<input id="import" data-testid="import" type="file" accept="application/json,.json"></label>
   <p id="status" data-testid="status" role="alert"></p>
+  <input id="search" data-testid="search" type="search" placeholder="Search cards…" autocomplete="off" aria-label="Search cards">
 </header>
 <main id="board" data-testid="board"></main>
 <script type="module" src="ui.js"></script>
