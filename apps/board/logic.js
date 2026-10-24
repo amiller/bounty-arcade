@@ -81,7 +81,7 @@ export function validate(board) {
 
 // Search is a projection of card IDs; it never changes the persisted board.
 export function filterBoard(board, query) {
-  const needle = query.trim() ? query.toLowerCase() : ''
+  const needle = query.trim().toLowerCase()
   return Object.fromEntries(IDS.map(col => [col, board.columns[col]
     .filter(card => card.text.toLowerCase().includes(needle)).map(card => card.id)]))
 }
