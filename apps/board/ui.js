@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, neighbour, filterBoard } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -98,3 +98,27 @@ $('import').onchange = async e => {
 
 render()
 $('board').dataset.ready = 'true'
+
+const searchInput = document.getElementById('search')
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    const query = searchInput.value.trim()
+    const filtered = filterBoard(board, query)
+    const columns = COLUMNS.map(([col, title]) => {
+      const cards = board.columns[col]
+      const matching = cards.filter(card => {
+        const text = card.text.toLowerCase()
+        const queryLower = query.toLowerCase()
+        return text.includes(queryLower)
+      })
+      const count = matching.length
+      const total = cards.length
+      const span = el('span', { textContent: `${count}/${total}` })
+      return el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
+        el('h2', {}, title, span),
+        el('ol', {}, ...matching.map((card, i) => cardView(col, card, i, matching.length)))
+      )
+    })
+    $('board').replaceChildren(...columns)
+  })
+}

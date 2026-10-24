@@ -78,3 +78,17 @@ export function validate(board) {
   }
   return board
 }
+
+export function filterBoard(board, query) {
+  if (!query || query.trim() === '') {
+    return Object.fromEntries(
+      IDS.map(col => [col, board.columns[col].map(card => card.id)])
+    )
+  }
+  const result = {}
+  for (const col of IDS) {
+    const matches = board.columns[col].filter(card => card.text.toLowerCase().includes(query.toLowerCase()))
+    result[col] = matches.map(card => card.id)
+  }
+  return result
+}
