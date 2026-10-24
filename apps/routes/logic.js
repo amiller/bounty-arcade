@@ -11,8 +11,10 @@ export function parseGpx(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+    const timeMatch = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
-    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
+    if (timeMatch) p.time = Date.parse(timeMatch[1])
+    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele)) || (p.time !== undefined && !Number.isFinite(p.time))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
@@ -68,3 +70,32 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+
+export function timing(points) {
+  if (!points.length || points.some(p => !('time' in p) || p.time === null || !Number.isFinite(p.time))) {
+    return { elapsed: null, moving: null, avgSpeed: null }
+  }
+  const elapsed = points.at(-1).time - points[0].time
+  let totalDist = 0
+  let moving = 0
+  for (let i = 1; i < points.length; i++) {
+    const d = haversine(points[i - 1], points[i])
+    totalDist += d
+    const dt = (points[i].time - points[i - 1].time) / 1000
+    const speed = dt > 0 ? d / dt : 0
+    if (speed >= 0.5) {
+      moving += points[i].time - points[i - 1].time
+    }
+  }
+  const avgSpeed = moving > 0 ? totalDist / (moving / 1000) : null
+  return { elapsed, moving, avgSpeed }
+}
+
+export function formatDuration(ms) {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—'
+  const totalSec = Math.round(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
