@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, filterBoard, neighbour } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -58,14 +58,16 @@ function cardView(col, card, index, count) {
   return li
 }
 
-function columnView([col, title]) {
+function columnView([col, title], matches) {
   const cards = board.columns[col]
+  const shown = matches && new Set(matches[col])
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
     input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
-    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
+    el('h2', {}, title, el('span', { textContent: shown ? `${shown.size}/${cards.length}` : cards.length })),
+    // Indices stay positions in the full column so moves act on the stored board.
+    el('ol', {}, ...cards.flatMap((card, i) => !shown || shown.has(card.id) ? [cardView(col, card, i, cards.length)] : [])),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
@@ -75,7 +77,9 @@ function columnView([col, title]) {
 
 function render() {
   const focused = document.activeElement?.dataset?.testid
-  $('board').replaceChildren(...COLUMNS.map(columnView))
+  const query = $('search').value
+  const matches = query.trim() ? filterBoard(board, query) : null
+  $('board').replaceChildren(...COLUMNS.map(c => columnView(c, matches)))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
 }
 
@@ -95,6 +99,10 @@ $('import').onchange = async e => {
     $('status').textContent = `Import failed: ${err.message}`
   }
 }
+
+// Search is view state only; clear any value the browser restores on reload.
+$('search').value = ''
+$('search').oninput = render
 
 render()
 $('board').dataset.ready = 'true'

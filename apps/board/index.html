@@ -32,6 +32,7 @@
   .card input { width: 100%; font: inherit; margin-bottom: .4rem; }
   .tools { display: flex; gap: .25rem; flex-wrap: wrap; }
   .tools button { padding: .1rem .45rem; font-size: .85rem; }
+  #search { font: inherit; padding: .25rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: inherit; }
   form { display: flex; gap: .4rem; }
   form input { flex: 1; min-width: 0; font: inherit; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: inherit; }
 </style>
@@ -40,6 +41,7 @@
 <header>
   <h1>Board</h1>
   <a href="../../">All apps</a>
+  <input id="search" data-testid="search" type="search" placeholder="Search cards" aria-label="Search cards" autocomplete="off">
   <button id="export" data-testid="export">Export JSON</button>
   <label class="file">Import JSON<input id="import" data-testid="import" type="file" accept="application/json,.json"></label>
   <p id="status" data-testid="status" role="alert"></p>

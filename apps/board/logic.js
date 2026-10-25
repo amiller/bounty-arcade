@@ -55,6 +55,12 @@ export function applyAction(board, action) {
   }
 }
 
+// Card ids per column whose text contains the trimmed query, case-insensitively. A blank query matches every card.
+export function filterBoard(board, query) {
+  const q = query.trim().toLowerCase()
+  return Object.fromEntries(IDS.map(col => [col, board.columns[col].filter(c => c.text.toLowerCase().includes(q)).map(c => c.id)]))
+}
+
 // Column to the left/right of col (delta -1/+1), undefined at the edges.
 export const neighbour = (col, delta) => IDS[IDS.indexOf(column(col)) + delta]
 
