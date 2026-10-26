@@ -95,3 +95,38 @@ export function step(state, input, dt) {
   if (y <= terrainAt(s.level, x)) s.status = 'crashed'
   return s
 }
+
+// A run is the seed plus one { pitch, throttle } input per step. Encoded as the
+// seed in base 36, '_', then one letter per stretch of identical inputs (A-I for
+// the 9 pitch/throttle pairs), followed by the stretch length in base 36 if > 1.
+const SYMBOLS = 'ABCDEFGHI'
+const MAX_RUN_STEPS = 1e6 // ~4.6 h at 60 steps/s; bounds what a pasted link can allocate
+
+export function encodeRun(seed, inputs) {
+  if (!Number.isSafeInteger(seed)) throw new RangeError(`seed must be an integer: ${seed}`)
+  let out = `${seed.toString(36)}_`
+  for (let i = 0; i < inputs.length;) {
+    const { pitch, throttle } = inputs[i]
+    if (![pitch, throttle].every(v => v === -1 || v === 0 || v === 1)) throw new RangeError(`input ${i} is not in {-1, 0, 1}`)
+    let n = 1
+    while (i + n < inputs.length && inputs[i + n].pitch === pitch && inputs[i + n].throttle === throttle) n++
+    out += SYMBOLS[(pitch + 1) * 3 + throttle + 1] + (n > 1 ? n.toString(36) : '')
+    i += n
+  }
+  return out
+}
+
+export function decodeRun(str) {
+  const m = /^(-?[0-9a-z]+)_((?:[A-I][0-9a-z]*)*)$/.exec(str)
+  if (!m) throw new Error('invalid run')
+  const inputs = []
+  for (const [, sym, count] of m[2].matchAll(/([A-I])([0-9a-z]*)/g)) {
+    const n = count ? parseInt(count, 36) : 1
+    if (n < 1 || inputs.length + n > MAX_RUN_STEPS) throw new Error('invalid run')
+    const k = SYMBOLS.indexOf(sym)
+    for (let i = 0; i < n; i++) inputs.push({ pitch: Math.floor(k / 3) - 1, throttle: k % 3 - 1 })
+  }
+  return { seed: parseInt(m[1], 36), inputs }
+}
+
+export const replay = (seed, inputs, dt) => inputs.reduce((s, input) => step(s, input, dt), initialState(makeLevel(seed)))
