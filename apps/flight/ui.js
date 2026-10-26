@@ -1,4 +1,4 @@
-import { makeLevel, initialState, step, terrainAt } from './logic.js'
+import { makeLevel, initialState, step, terrainAt, encodeRun, decodeRun } from './logic.js'
 
 const DT = 1 / 60
 const VIEW_H = 220
@@ -8,28 +8,41 @@ const keys = new Set()
 const bindings = { ArrowUp: ['pitch', 1], KeyW: ['pitch', 1], ArrowDown: ['pitch', -1], KeyS: ['pitch', -1],
   ArrowRight: ['throttle', 1], KeyD: ['throttle', 1], ArrowLeft: ['throttle', -1], KeyA: ['throttle', -1] }
 let state, acc = 0, last = performance.now()
+// recorded: inputs applied so far this run; replaying: inputs from a ?run= link, or null
+let recorded = [], replaying = null
 
 function restart() {
-  state = initialState(makeLevel(Number($('seed').value)))
+  // Only integer seeds, so every run the page flies is one encodeRun accepts.
+  const seed = Math.trunc(Number($('seed').value))
+  state = initialState(makeLevel(Number.isSafeInteger(seed) ? seed : 0))
   acc = 0
+  recorded = []
+}
+
+// Manual restarts leave replay mode and drop ?run= so a reload plays normally.
+function restartManually() {
+  replaying = null
+  history.replaceState(null, '', location.pathname)
+  restart()
 }
 
 function input() {
   const out = { pitch: 0, throttle: 0 }
   for (const k of keys) out[bindings[k][0]] += bindings[k][1]
-  return out
+  // Two keys for the same control (ArrowUp + W) count once, so every input is recordable.
+  return { pitch: Math.sign(out.pitch), throttle: Math.sign(out.throttle) }
 }
 
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return
-  if (e.code === 'KeyR') return restart()
+  if (e.code === 'KeyR') return restartManually()
   if (!bindings[e.code]) return
   e.preventDefault()
   keys.add(e.code)
 })
 addEventListener('keyup', e => keys.delete(e.code))
 addEventListener('blur', () => keys.clear())
-$('level-form').addEventListener('submit', e => { e.preventDefault(); restart(); $('restart').blur() })
+$('level-form').addEventListener('submit', e => { e.preventDefault(); restartManually(); $('restart').blur() })
 
 function draw() {
   const W = canvas.clientWidth * devicePixelRatio, H = canvas.clientHeight * devicePixelRatio
@@ -101,16 +114,33 @@ function hud() {
   $('status').textContent = state.status
   $('stall').classList.toggle('on', state.stalled)
   canvas.dataset.status = state.status
+  $('share').href = `?run=${encodeRun(state.level.seed, recorded)}`
 }
 
 function frame(now) {
   acc += Math.min(now - last, 100) / 1000
   last = now
-  for (; acc >= DT; acc -= DT) state = step(state, input(), DT)
+  for (; acc >= DT; acc -= DT) {
+    // A replay stops where its inputs end, so the game ends in the state replay() gives.
+    if (state.status !== 'flying' || (replaying && recorded.length === replaying.length)) continue
+    const inp = replaying ? replaying[recorded.length] : input()
+    recorded.push(inp)
+    state = step(state, inp, DT)
+  }
   draw()
   hud()
   requestAnimationFrame(frame)
 }
 
+const run = new URLSearchParams(location.search).get('run')
+if (run) {
+  try {
+    const { seed, inputs } = decodeRun(run)
+    $('seed').value = seed
+    replaying = inputs
+  } catch {
+    // A malformed link just opens the game normally.
+  }
+}
 restart()
 requestAnimationFrame(frame)
