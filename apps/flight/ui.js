@@ -94,6 +94,7 @@ function draw() {
 }
 
 function hud() {
+  $('wind').textContent = `${Math.round(state.level.wind ?? 0)} m/s`
   $('score').textContent = `${state.score}/${state.level.gates.length}`
   $('speed').textContent = Math.hypot(state.vx, state.vy).toFixed(0)
   $('altitude').textContent = (state.y - terrainAt(state.level, state.x)).toFixed(0)
