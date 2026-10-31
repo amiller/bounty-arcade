@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, neighbour, filterBoard } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -58,14 +58,14 @@ function cardView(col, card, index, count) {
   return li
 }
 
-function columnView([col, title]) {
+function columnView([col, title], matches, searching) {
   const cards = board.columns[col]
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
     input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
-    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
+    el('h2', {}, title, el('span', { textContent: searching ? `${matches.length}/${cards.length}` : cards.length })),
+    el('ol', {}, ...cards.flatMap((card, i) => matches.includes(card.id) ? [cardView(col, card, i, cards.length)] : [])),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
@@ -75,9 +75,14 @@ function columnView([col, title]) {
 
 function render() {
   const focused = document.activeElement?.dataset?.testid
-  $('board').replaceChildren(...COLUMNS.map(columnView))
+  const query = $('search').value
+  const matches = filterBoard(board, query)
+  $('board').replaceChildren(...COLUMNS.map(column => columnView(column, matches[column[0]], Boolean(query.trim()))))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
 }
+
+$('search').value = ''
+$('search').oninput = () => render()
 
 $('export').onclick = () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' }))
