@@ -11,7 +11,12 @@ export function parseGpx(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+    const time = m[2]?.match(/<time>\s*([^<]+?)\s*<\/time>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
+    if (time) {
+      p.time = Date.parse(time[1].trim())
+      if (!Number.isFinite(p.time)) throw new Error(`bad trkpt time: ${m[0]}`)
+    }
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
     points.push(p)
   }
@@ -23,6 +28,28 @@ export function parseGpx(text) {
 export function haversine(a, b) {
   const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h))
+}
+
+export const MOVING_SPEED_MPS = 0.5
+
+export function timing(points) {
+  if (!points.length || !points.every(p => Number.isFinite(p.time))) {
+    return { elapsed: null, moving: null, avgSpeed: null }
+  }
+  let moving = 0, distance = 0
+  for (let i = 1; i < points.length; i++) {
+    const dt = points[i].time - points[i - 1].time
+    const segment = haversine(points[i - 1], points[i])
+    distance += segment
+    if (dt > 0 && segment / (dt / 1000) >= MOVING_SPEED_MPS) {
+      moving += dt
+    }
+  }
+  return {
+    elapsed: points.at(-1).time - points[0].time,
+    moving,
+    avgSpeed: moving > 0 ? distance / (moving / 1000) : null
+  }
 }
 
 export function profile(points) {
@@ -68,3 +95,11 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+export const formatDuration = ms => {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return '—'
+  const seconds = Math.floor(ms / 1000)
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}

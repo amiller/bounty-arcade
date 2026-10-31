@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { parseGpx, haversine, profile, stats, project, profileCoords, formatKm, formatM, EARTH_RADIUS_M } from '../logic.js'
+import { parseGpx, haversine, profile, stats, project, profileCoords, formatKm, formatM, EARTH_RADIUS_M, timing, formatDuration } from '../logic.js'
 
 const sample = f => parseGpx(readFileSync(new URL(`../samples/${f}`, import.meta.url), 'utf8'))
 const near = (a, b, tol) => assert.ok(Math.abs(a - b) <= tol, `${a} not within ${tol} of ${b}`)
@@ -90,4 +90,29 @@ test('formatting', () => {
   assert.equal(formatKm(4020.83), '4.02 km')
   assert.equal(formatM(865.1), '865 m')
   assert.equal(formatM(null), '—')
+})
+
+test('parses trkpt time', () => {
+  const g = parseGpx('<gpx><trk><trkseg><trkpt lat="0" lon="0"><time>2026-01-01T00:00:00Z</time></trkpt><trkpt lat="0" lon="1"/></trkseg></trk></gpx>')
+  assert.equal(g.points[0].time, Date.UTC(2026, 0, 1))
+  assert.equal('time' in g.points[1], false)
+})
+
+test('timing computes elapsed, moving, and avgSpeed', () => {
+  const pts = [[0, 0], [0.001, 60000], [0.001, 600000]].map(([lon, time]) => ({ lat: 0, lon, ele: null, time }))
+  const t = timing(pts)
+  assert.equal(t.elapsed, 600000)
+  assert.equal(t.moving, 60000)
+  near(t.avgSpeed, haversine(pts[0], pts[1]) / 60, 0.01)
+})
+
+test('timing returns nulls if any point lacks time', () => {
+  assert.deepEqual(timing([{ lat: 0, lon: 0, ele: null, time: 0 }, { lat: 0, lon: 0.01, ele: null }]), { elapsed: null, moving: null, avgSpeed: null })
+})
+
+test('formatDuration formats hours, minutes, seconds and handles null', () => {
+  assert.equal(formatDuration(3723000), '1:02:03')
+  assert.equal(formatDuration(120000), '0:02:00')
+  assert.equal(formatDuration(60000), '0:01:00')
+  assert.equal(formatDuration(null), '—')
 })
