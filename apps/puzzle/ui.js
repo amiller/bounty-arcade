@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, replayUrl, parseReplay } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -9,6 +9,7 @@ let state, inside
 levels.forEach((lv, i) => select.add(new Option(`${i + 1}. ${lv.name}`, i)))
 
 function load(i) {
+  $('share-url').value = ''
   select.value = i
   state = parse(levels[i].map)
   inside = interior(state)
@@ -39,7 +40,7 @@ function step(dir) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.target === select) return
+  if (e.target === select || e.target.tagName === 'INPUT') return
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
   if (keys[k]) step(keys[k])
   else if (k === 'z' || k === 'Backspace') { state = undo(state); draw() }
@@ -53,4 +54,27 @@ $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
+$('share').addEventListener('click', () => {
+  const url = new URL(location.href)
+  url.hash = replayUrl(+select.value, state)
+  $('share-url').value = url.href
+})
+
 load(0)
+if (location.hash) {
+  try {
+    const replay = parseReplay(location.hash)
+    if (replay.level >= levels.length) throw new Error('Replay level does not exist')
+    load(replay.level)
+    for (let i = 0; i < replay.moves.length; i++) {
+      const next = move(state, replay.moves[i].toLowerCase())
+      if (next === state) throw new Error('Replay blocked at step ' + (i + 1))
+      state = next
+    }
+    draw()
+  } catch (error) {
+    // Keep every successful move before a blocked step; never apply later moves.
+    draw()
+    $('status').textContent = error.message
+  }
+}
