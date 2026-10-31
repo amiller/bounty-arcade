@@ -33,20 +33,41 @@ function drawProfile(points, s) {
   )
 }
 
-function show(text, label) {
-  $('error').textContent = ''
-  const { name, points } = parseGpx(text)
-  const s = stats(points)
-  $('route-name').textContent = name ?? label
+let currentPoints = null
+let threshold = 0
+
+function showStats(points) {
+  const s = stats(points, { threshold })
   $('stat-distance').textContent = formatKm(s.distance)
   $('stat-gain').textContent = formatM(s.gain)
   $('stat-loss').textContent = formatM(s.loss)
   $('stat-min').textContent = formatM(s.minEle)
   $('stat-max').textContent = formatM(s.maxEle)
   $('stat-count').textContent = s.count
+  return s
+}
+
+function show(text, label) {
+  $('error').textContent = ''
+  const { name, points } = parseGpx(text)
+  currentPoints = points
+  const s = showStats(points)
+  $('route-name').textContent = name ?? label
   drawTrack(points)
   drawProfile(points, s)
 }
+
+$('threshold').addEventListener('input', () => {
+  const input = $('threshold')
+  const value = input.value === '' ? 0 : input.valueAsNumber
+  if (input.validity.badInput || !Number.isFinite(value) || value < 0) {
+    input.setCustomValidity('Enter a non-negative threshold in metres')
+    return
+  }
+  input.setCustomValidity('')
+  threshold = value
+  if (currentPoints) showStats(currentPoints)
+})
 
 const report = e => { $('error').textContent = e.message; throw e }
 
