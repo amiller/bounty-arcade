@@ -3,6 +3,16 @@ const IDS = COLUMNS.map(([id]) => id)
 
 export const emptyBoard = () => ({ nextId: 1, columns: { todo: [], doing: [], done: [] } })
 
+export function filterBoard(board, query) {
+  const q = (typeof query === 'string' ? query : '').trim().toLowerCase()
+  const result = {}
+  for (const [col] of COLUMNS) {
+    const list = board.columns[col] || []
+    result[col] = q ? list.filter(c => c.text.toLowerCase().includes(q)).map(c => c.id) : list.map(c => c.id)
+  }
+  return result
+}
+
 export function findCard(board, id) {
   for (const col of IDS) {
     const index = board.columns[col].findIndex(c => c.id === id)
