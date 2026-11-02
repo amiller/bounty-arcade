@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, filterBoard, neighbour } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -58,14 +58,17 @@ function cardView(col, card, index, count) {
   return li
 }
 
-function columnView([col, title]) {
+function columnView([col, title], matches, active) {
   const cards = board.columns[col]
+  const matchingIds = new Set(matches[col])
+  const count = active ? `${matchingIds.size}/${cards.length}` : `${cards.length}`
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
     input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
+  const visible = cards.filter(c => matchingIds.has(c.id))
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
-    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
+    el('h2', {}, title, el('span', { textContent: count })),
+    el('ol', {}, ...visible.map(card => cardView(col, card, cards.indexOf(card), cards.length))),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
@@ -75,9 +78,14 @@ function columnView([col, title]) {
 
 function render() {
   const focused = document.activeElement?.dataset?.testid
-  $('board').replaceChildren(...COLUMNS.map(columnView))
+  const query = $('search')?.value ?? ''
+  const active = Boolean(query.trim())
+  const matches = filterBoard(board, query)
+  $('board').replaceChildren(...COLUMNS.map(c => columnView(c, matches, active)))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
 }
+
+$('search').oninput = () => render()
 
 $('export').onclick = () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' }))

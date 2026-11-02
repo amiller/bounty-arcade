@@ -58,6 +58,18 @@ export function applyAction(board, action) {
 // Column to the left/right of col (delta -1/+1), undefined at the edges.
 export const neighbour = (col, delta) => IDS[IDS.indexOf(column(col)) + delta]
 
+export function filterBoard(board, query) {
+  const needle = typeof query === 'string' ? query.trim().toLowerCase() : ''
+  const result = {}
+  for (const col of IDS) {
+    const cards = board.columns[col] || []
+    result[col] = needle
+      ? cards.filter(c => c.text.toLowerCase().includes(needle)).map(c => c.id)
+      : cards.map(c => c.id)
+  }
+  return result
+}
+
 export function validate(board) {
   const fail = msg => { throw new Error(`invalid board: ${msg}`) }
   if (!board || typeof board !== 'object' || Array.isArray(board)) fail('not an object')
