@@ -8,16 +8,28 @@ const attr = (tag, name) => {
 }
 
 export function parseGpx(text) {
-  const points = []
-  for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
-    const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
-    const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
-    if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
-    points.push(p)
+  const parsePts = chunk => {
+    const res = []
+    for (const m of chunk.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
+      const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+      const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
+      if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
+      res.push(p)
+    }
+    return res
   }
+
+  let segments
+  const segMatches = [...text.matchAll(/<trkseg\b[^>]*>([\s\S]*?)<\/trkseg>/g)]
+  if (segMatches.length > 0) {
+    segments = segMatches.map(m => parsePts(m[1]))
+  } else {
+    segments = [parsePts(text)]
+  }
+  const points = segments.flat()
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
   const name = text.match(/<trk>[\s\S]*?<name>([^<]*)<\/name>/)?.[1].trim() ?? null
-  return { name, points }
+  return { name, points, segments }
 }
 
 export function haversine(a, b) {
@@ -30,20 +42,28 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points) {
-  const eles = points.map(p => p.ele).filter(e => e !== null)
+export function stats(points, { segments } = {}) {
+  const segs = segments ?? [points]
+  let distance = 0
   let gain = 0, loss = 0
-  for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+  for (const seg of segs) {
+    for (let i = 1; i < seg.length; i++) {
+      distance += haversine(seg[i - 1], seg[i])
+    }
+    const eles = seg.map(p => p.ele).filter(e => e !== null)
+    for (let i = 1; i < eles.length; i++) {
+      const dz = eles[i] - eles[i - 1]
+      if (dz > 0) gain += dz; else loss -= dz
+    }
   }
+  const allEles = points.map(p => p.ele).filter(e => e !== null)
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
-    distance: profile(points).at(-1).d,
+    distance,
     gain, loss,
-    minEle: eles.length ? Math.min(...eles) : null,
-    maxEle: eles.length ? Math.max(...eles) : null,
+    minEle: allEles.length ? Math.min(...allEles) : null,
+    maxEle: allEles.length ? Math.max(...allEles) : null,
     bbox: { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) },
   }
 }
