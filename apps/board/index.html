@@ -15,7 +15,8 @@
   header { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; padding: 1rem; }
   header h1 { margin: 0; font-size: 1.25rem; flex: 1; }
   a { color: var(--accent); }
-  button, .file { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: .25rem .6rem; cursor: pointer; }
+  button, .file, #search { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: .25rem .6rem; }
+  button, .file { cursor: pointer; }
   button:disabled { opacity: .35; cursor: default; }
   .file input { display: none; }
   #status { width: 100%; margin: 0; color: #c0392b; }
@@ -39,6 +40,7 @@
 <body>
 <header>
   <h1>Board</h1>
+  <input id="search" data-testid="search" type="search" placeholder="Search cards">
   <a href="../../">All apps</a>
   <button id="export" data-testid="export">Export JSON</button>
   <label class="file">Import JSON<input id="import" data-testid="import" type="file" accept="application/json,.json"></label>

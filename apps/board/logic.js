@@ -78,3 +78,15 @@ export function validate(board) {
   }
   return board
 }
+
+export function filterBoard(board, query = '') {
+  const q = String(query ?? '').trim().toLowerCase()
+  const res = {}
+  for (const col of IDS) {
+    const list = board?.columns?.[col] || []
+    res[col] = list
+      .filter(card => !q || card.text.toLowerCase().includes(q))
+      .map(card => card.id)
+  }
+  return res
+}
