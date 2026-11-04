@@ -30,13 +30,62 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points) {
-  const eles = points.map(p => p.ele).filter(e => e !== null)
-  let gain = 0, loss = 0
-  for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+function calcGainLoss(eles, threshold = 0) {
+  if (eles.length < 2) return { gain: 0, loss: 0 }
+  if (!threshold || threshold <= 0) {
+    let gain = 0, loss = 0
+    for (let i = 1; i < eles.length; i++) {
+      const dz = eles[i] - eles[i - 1]
+      if (dz > 0) gain += dz; else loss -= dz
+    }
+    return { gain, loss }
   }
+
+  let gain = 0, loss = 0
+  let state = null
+  let low = eles[0], high = eles[0]
+
+  for (let i = 1; i < eles.length; i++) {
+    const e = eles[i]
+    if (state === null) {
+      if (e - low >= threshold) {
+        state = 'UP'
+        gain += e - low
+        high = e
+      } else if (high - e >= threshold) {
+        state = 'DOWN'
+        loss += high - e
+        low = e
+      } else {
+        if (e < low) low = e
+        if (e > high) high = e
+      }
+    } else if (state === 'UP') {
+      if (e > high) {
+        gain += e - high
+        high = e
+      } else if (high - e >= threshold) {
+        state = 'DOWN'
+        loss += high - e
+        low = e
+      }
+    } else if (state === 'DOWN') {
+      if (e < low) {
+        loss += low - e
+        low = e
+      } else if (e - low >= threshold) {
+        state = 'UP'
+        gain += e - low
+        high = e
+      }
+    }
+  }
+  return { gain, loss }
+}
+
+export function stats(points, { threshold = 0 } = {}) {
+  const eles = points.map(p => p.ele).filter(e => e !== null)
+  const { gain, loss } = calcGainLoss(eles, threshold)
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {
     count: points.length,
