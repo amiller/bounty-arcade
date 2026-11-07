@@ -21,15 +21,24 @@ function column(id) {
   return id
 }
 
-const clone = board => ({ nextId: board.nextId, columns: Object.fromEntries(IDS.map(c => [c, board.columns[c].map(card => ({ ...card }))])) })
+const clone = board => ({
+  nextId: board.nextId,
+  columns: Object.fromEntries(IDS.map(c => [c, board.columns[c].map(card => ({ ...card }))])),
+  ...(board.limits ? { limits: { ...board.limits } } : {})
+})
 
 export function applyAction(board, action) {
   const next = clone(board)
   const cols = next.columns
   switch (action.type) {
-    case 'add':
-      cols[column(action.column)].push({ id: `c${next.nextId++}`, text: cleanText(action.text) })
+    case 'add': {
+      const col = column(action.column)
+      if (col === 'doing' && next.limits?.doing && cols.doing.length >= next.limits.doing) {
+        throw new Error('WIP limit exceeded')
+      }
+      cols[col].push({ id: `c${next.nextId++}`, text: cleanText(action.text) })
       return next
+    }
     case 'edit':
       findCard(next, action.id).card.text = cleanText(action.text)
       return next
@@ -42,10 +51,25 @@ export function applyAction(board, action) {
     case 'move': {
       const { col, index, card } = findCard(next, action.id)
       const to = column(action.to)
+      if (to === 'doing' && col !== 'doing' && next.limits?.doing && cols.doing.length >= next.limits.doing) {
+        throw new Error('WIP limit exceeded')
+      }
       cols[col].splice(index, 1)
       const at = action.index ?? cols[to].length
       if (!Number.isInteger(at) || at < 0 || at > cols[to].length) throw new Error(`bad index ${at}`)
       cols[to].splice(at, 0, card)
+      return next
+    }
+    case 'setLimit': {
+      if (action.column !== 'doing') throw new Error(`bad column ${action.column}`)
+      if (action.limit === null || action.limit === undefined || action.limit === '') {
+        delete next.limits
+        return next
+      }
+      const n = Number(action.limit)
+      if (!Number.isInteger(n) || n < 1) throw new Error('limit must be a positive integer')
+      if (cols.doing.length > n) throw new Error('WIP limit: count exceeds limit')
+      next.limits = { doing: n }
       return next
     }
     case 'import':
@@ -76,5 +100,16 @@ export function validate(board) {
       if (typeof card.text !== 'string' || !card.text.trim()) fail(`card ${card.id} has empty text`)
     }
   }
+  if (board.limits !== undefined) {
+    if (!board.limits || typeof board.limits !== 'object' || Array.isArray(board.limits)) fail('limits must be an object')
+    const limitKeys = Object.keys(board.limits)
+    for (const key of limitKeys) {
+      if (key !== 'doing') fail(`unknown limit key ${key}`)
+      const val = board.limits[key]
+      if (!Number.isInteger(val) || val < 1) fail(`limit ${key} must be a positive integer`)
+      if (cols[key].length > val) fail(`count in ${key} exceeds limit`)
+    }
+  }
   return board
 }
+
