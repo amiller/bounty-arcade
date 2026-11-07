@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, replayUrl, parseReplay } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -39,7 +39,7 @@ function step(dir) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.target === select) return
+  if (e.target === select || e.target?.tagName === 'INPUT') return
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
   if (keys[k]) step(keys[k])
   else if (k === 'z' || k === 'Backspace') { state = undo(state); draw() }
@@ -53,4 +53,42 @@ $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
-load(0)
+const shareBtn = $('share')
+if (shareBtn) {
+  shareBtn.addEventListener('click', () => {
+    const url = new URL(location.href)
+    url.hash = replayUrl(+select.value, state)
+    const shareUrl = url.href
+    const input = $('share-url')
+    if (input) input.value = shareUrl
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(shareUrl).catch(() => {})
+  })
+}
+
+function init() {
+  if (location.hash) {
+    try {
+      const replay = parseReplay(location.hash)
+      if (replay.level >= 0 && replay.level < levels.length) {
+        load(replay.level)
+        let blocked = false
+        for (const m of replay.moves) {
+          const next = move(state, m.toLowerCase())
+          if (next === state) {
+            blocked = true
+            break
+          }
+          state = next
+        }
+        draw()
+        if (blocked) {
+          $('status').textContent = 'Move blocked'
+        }
+        return
+      }
+    } catch {}
+  }
+  load(0)
+}
+
+init()

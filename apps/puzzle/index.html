@@ -11,7 +11,9 @@
   header { display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
   h1 { margin: 0; font-size: 1.4rem; }
   .bar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
-  button, select { font: inherit; padding: .3rem .7rem; border: 1px solid var(--wall); border-radius: 6px; background: #fff; color: inherit; cursor: pointer; }
+  button, select, input { font: inherit; padding: .3rem .7rem; border: 1px solid var(--wall); border-radius: 6px; background: #fff; color: inherit; }
+  button, select { cursor: pointer; }
+  #share-url { width: 12rem; }
   #board { display: grid; gap: 0; width: fit-content; max-width: 100%; margin: 0 auto; touch-action: manipulation; }
   .cell { width: var(--size); height: var(--size); box-sizing: border-box; position: relative; }
   .floor, .goal { background: var(--floor); }
@@ -41,6 +43,8 @@
   <button id="restart" data-testid="restart">Restart</button>
   <span>Moves <b id="moves" data-testid="moves">0</b></span>
   <span>Pushes <b id="pushes" data-testid="pushes">0</b></span>
+  <button id="share" data-testid="share">Copy link</button>
+  <input id="share-url" data-testid="share-url" readonly>
 </div>
 <div id="board" data-testid="board"></div>
 <p id="status" data-testid="status" role="status"></p>
