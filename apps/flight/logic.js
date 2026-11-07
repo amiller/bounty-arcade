@@ -8,6 +8,7 @@ export const T_MAX = 4
 export const PITCH_RATE = 1
 export const THROTTLE_RATE = 0.5
 export const CRUISE = 40
+export const BURN = 1 / 90
 
 export function mulberry32(seed) {
   let a = seed >>> 0
@@ -56,16 +57,16 @@ export function terrainAt({ spacing, terrain }, x) {
 
 export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
   const { pitch, throttle } = trim(speed)
-  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
+  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, fuel: 1, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
 }
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
+export function forces({ vx, vy, pitch, throttle, fuel = 1 }) {
   const v = Math.hypot(vx, vy)
   const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
   const q = K * v * v
-  const lift = q * cl(alpha), drag = q * cd(alpha), thrust = throttle * T_MAX
+  const lift = q * cl(alpha), drag = q * cd(alpha), thrust = (fuel > 0 ? throttle : 0) * T_MAX
   const ux = v ? vx / v : 0, uy = v ? vy / v : 0
   return {
     alpha, lift,
@@ -79,10 +80,11 @@ export function step(state, input, dt) {
   if (state.status !== 'flying') return state
   const pitch = state.pitch + (input.pitch || 0) * PITCH_RATE * dt
   const throttle = clamp(state.throttle + (input.throttle || 0) * THROTTLE_RATE * dt, 0, 1)
-  const { ax, ay, alpha } = forces({ ...state, pitch, throttle })
+  const fuel = Math.max(0, (state.fuel ?? 1) - throttle * BURN * dt)
+  const { ax, ay, alpha } = forces({ ...state, pitch, throttle, fuel })
   const vx = state.vx + ax * dt, vy = state.vy + ay * dt
   const x = state.x + vx * dt, y = state.y + vy * dt
-  const s = { ...state, t: state.t + dt, x, y, vx, vy, pitch, throttle, stalled: isStalled(alpha) }
+  const s = { ...state, t: state.t + dt, x, y, vx, vy, pitch, throttle, fuel, stalled: isStalled(alpha) }
   const gate = s.level.gates[s.next]
   if (gate && state.x < gate.x && x >= gate.x) {
     const gy = state.y + (y - state.y) * (gate.x - state.x) / (x - state.x)
