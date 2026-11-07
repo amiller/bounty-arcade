@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, deadBoxes } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -18,18 +18,20 @@ function load(i) {
 }
 
 function draw() {
+  const dead = new Set(deadBoxes(state))
   board.replaceChildren(...Array.from({ length: state.w * state.h }, (_, i) => {
     const c = document.createElement('div')
     c.className = 'cell ' + (state.walls.has(i) ? 'wall' : inside.has(i) ? 'floor' : 'outside')
     if (state.goals.has(i)) c.classList.add('goal')
     if (state.boxes.includes(i)) c.classList.add('box')
+    if (dead.has(i)) c.classList.add('dead')
     if (i === state.player) c.classList.add('player')
     return c
   }))
   $('moves').textContent = moves(state)
   $('pushes').textContent = pushes(state)
   const last = +select.value === levels.length - 1
-  $('status').textContent = isWon(state) ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.') : ''
+  $('status').textContent = isWon(state) ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.') : dead.size ? 'Stuck: a box is in a corner' : ''
 }
 
 function step(dir) {
