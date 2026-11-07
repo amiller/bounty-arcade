@@ -25,6 +25,23 @@ export const moves = state => state.history.length
 export const pushes = state => state.history.filter(m => m === m.toUpperCase()).length
 export const isWon = state => state.boxes.every(b => state.goals.has(b))
 
+export function replayUrl(levelIndex, state) {
+  return `#level=${levelIndex}&moves=${state.history.join('')}`
+}
+
+export function parseReplay(hash) {
+  if (typeof hash !== 'string') throw new Error('bad hash')
+  const s = hash.startsWith('#') ? hash.slice(1) : hash
+  const params = new URLSearchParams(s)
+  if (!params.has('level') || !params.has('moves')) throw new Error('missing level or moves')
+  const rawLevel = params.get('level')
+  if (!/^\d+$/.test(rawLevel)) throw new Error('bad level index')
+  const level = parseInt(rawLevel, 10)
+  const moves = params.get('moves')
+  if (!/^[udlrUDLR]*$/.test(moves)) throw new Error('bad moves')
+  return { level, moves }
+}
+
 // Returns the same state object when the move is blocked.
 export function move(state, dir) {
   const d = DIRS[dir]
