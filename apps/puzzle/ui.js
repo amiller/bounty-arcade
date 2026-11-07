@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, recordWin } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -6,10 +6,31 @@ const board = $('board'), select = $('level')
 const keys = { ArrowUp: 'u', ArrowDown: 'd', ArrowLeft: 'l', ArrowRight: 'r', w: 'u', s: 'd', a: 'l', d: 'r' }
 let state, inside
 
-levels.forEach((lv, i) => select.add(new Option(`${i + 1}. ${lv.name}`, i)))
+let progress = {}
+try {
+  progress = JSON.parse(localStorage.getItem('puzzle-progress')) || {}
+} catch {}
+
+function updateSelectLabels() {
+  levels.forEach((lv, i) => {
+    const best = progress[lv.name]?.best
+    const label = best !== undefined ? `${i + 1}. ${lv.name} ✓ ${best}` : `${i + 1}. ${lv.name}`
+    if (select.options[i]) {
+      select.options[i].text = label
+    } else {
+      select.add(new Option(label, i))
+    }
+  })
+}
+
+updateSelectLabels()
 
 function load(i) {
   select.value = i
+  try {
+    localStorage.setItem('puzzle-level', i)
+    localStorage.setItem('puzzle-last-level', i)
+  } catch {}
   state = parse(levels[i].map)
   inside = interior(state)
   board.style.gridTemplateColumns = `repeat(${state.w}, var(--size))`
@@ -26,10 +47,23 @@ function draw() {
     if (i === state.player) c.classList.add('player')
     return c
   }))
-  $('moves').textContent = moves(state)
+  const curMoves = moves(state)
+  $('moves').textContent = curMoves
   $('pushes').textContent = pushes(state)
+  const won = isWon(state)
   const last = +select.value === levels.length - 1
-  $('status').textContent = isWon(state) ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.') : ''
+  $('status').textContent = won ? (last ? 'Solved! That was the last level.' : 'Solved! Press N for the next level.') : ''
+
+  if (won) {
+    const curLevel = levels[+select.value]
+    if (curLevel) {
+      progress = recordWin(progress, curLevel.name, curMoves)
+      try {
+        localStorage.setItem('puzzle-progress', JSON.stringify(progress))
+      } catch {}
+      updateSelectLabels()
+    }
+  }
 }
 
 function step(dir) {
@@ -53,4 +87,11 @@ $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
-load(0)
+let initialLevel = 0
+try {
+  const saved = localStorage.getItem('puzzle-level') ?? localStorage.getItem('puzzle-last-level')
+  if (saved !== null && !isNaN(Number(saved)) && Number(saved) >= 0 && Number(saved) < levels.length) {
+    initialLevel = Number(saved)
+  }
+} catch {}
+load(initialLevel)
