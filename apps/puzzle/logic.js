@@ -48,6 +48,17 @@ export function undo(state) {
   return { ...state, player: state.player - back, boxes, history: state.history.slice(0, -1) }
 }
 
+export function deadBoxes(state) {
+  const { w, walls, goals, boxes } = state
+  return boxes.filter(b => {
+    if (goals.has(b)) return false
+    const x = b % w, y = Math.floor(b / w)
+    const vWall = walls.has((y - 1) * w + x) || walls.has((y + 1) * w + x)
+    const hWall = walls.has(y * w + x - 1) || walls.has(y * w + x + 1)
+    return vWall && hWall
+  }).sort((a, b) => a - b)
+}
+
 // Applies a LURD string (case-insensitive); throws on a blocked move so solutions are checked exactly.
 export function play(state, lurd) {
   for (const c of lurd) {
