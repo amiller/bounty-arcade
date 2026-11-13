@@ -11,8 +11,14 @@ export function parseGpx(text) {
   const points = []
   for (const m of text.matchAll(/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g)) {
     const ele = m[2]?.match(/<ele>\s*([^<]+?)\s*<\/ele>/)
+    const time = m[2]?.match(/<time\b[^>]*>\s*([^<]+?)\s*<\/time>/)
     const p = { lat: attr(m[1], 'lat'), lon: attr(m[1], 'lon'), ele: ele ? Number(ele[1]) : null }
     if (![p.lat, p.lon].every(Number.isFinite) || (p.ele !== null && !Number.isFinite(p.ele))) throw new Error(`bad trkpt: ${m[0]}`)
+    if (time) {
+      const t = Date.parse(time[1])
+      if (!Number.isFinite(t)) throw new Error(`bad trkpt: ${m[0]}`)
+      p.time = t
+    }
     points.push(p)
   }
   if (!points.length) throw new Error('no <trkpt> elements in GPX')
@@ -48,6 +54,25 @@ export function stats(points) {
   }
 }
 
+export function timing(points) {
+  if (points.some(p => p.time === undefined)) return { elapsed: null, moving: null, avgSpeed: null }
+
+  let distance = 0
+  let moving = 0
+  for (let i = 1; i < points.length; i++) {
+    const dt = points[i].time - points[i - 1].time
+    const d = haversine(points[i - 1], points[i])
+    distance += d
+    if (dt > 0 && d / (dt / 1000) >= 0.5) moving += dt
+  }
+
+  return {
+    elapsed: points.at(-1).time - points[0].time,
+    moving,
+    avgSpeed: moving ? distance / (moving / 1000) : 0,
+  }
+}
+
 // Equirectangular projection scaled to fit width x height (minus pad), aspect preserved, north up.
 export function project(points, width, height, pad = 0) {
   const { bbox } = stats(points)
@@ -68,3 +93,12 @@ export function profileCoords(prof, width, height, pad = 0) {
 
 export const formatKm = m => `${(m / 1000).toFixed(2)} km`
 export const formatM = m => m === null ? '—' : `${Math.round(m)} m`
+
+export function formatDuration(ms) {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—'
+  const total = Math.floor(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
