@@ -1,4 +1,4 @@
-import { parseGpx, stats, profile, project, profileCoords, formatKm, formatM } from './logic.js'
+import { parseGpx, stats, profile, project, profileCoords, formatKm, formatM, timing, formatDuration } from './logic.js'
 
 const $ = id => document.getElementById(id)
 const NS = 'http://www.w3.org/2000/svg'
@@ -37,8 +37,11 @@ function show(text, label) {
   $('error').textContent = ''
   const { name, points } = parseGpx(text)
   const s = stats(points)
+  const t = timing(points)
   $('route-name').textContent = name ?? label
   $('stat-distance').textContent = formatKm(s.distance)
+  $('stat-elapsed').textContent = formatDuration(t.elapsed)
+  $('stat-moving').textContent = formatDuration(t.moving)
   $('stat-gain').textContent = formatM(s.gain)
   $('stat-loss').textContent = formatM(s.loss)
   $('stat-min').textContent = formatM(s.minEle)
