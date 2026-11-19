@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, applyAction, emptyBoard, neighbour, filterBoard } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -20,6 +20,7 @@ const store = mode => db.transaction('kv', mode).objectStore('kv')
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
 let editing = null
 let saves = 0
+let query = ''
 
 async function save() {
   const tx = db.transaction('kv', 'readwrite')
@@ -58,14 +59,18 @@ function cardView(col, card, index, count) {
   return li
 }
 
-function columnView([col, title]) {
+function columnView([col, title], matches) {
   const cards = board.columns[col]
+  const isFiltering = query.trim() !== ''
+  const colMatches = matches[col] || []
+  const visibleCards = isFiltering ? cards.filter(c => colMatches.includes(c.id)) : cards
   const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
     input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
+  const countText = isFiltering ? `${colMatches.length}/${cards.length}` : `${cards.length}`
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
-    el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
+    el('h2', {}, title, el('span', { textContent: countText })),
+    el('ol', {}, ...visibleCards.map(card => cardView(col, card, cards.indexOf(card), cards.length))),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
@@ -75,7 +80,8 @@ function columnView([col, title]) {
 
 function render() {
   const focused = document.activeElement?.dataset?.testid
-  $('board').replaceChildren(...COLUMNS.map(columnView))
+  const matches = filterBoard(board, query)
+  $('board').replaceChildren(...COLUMNS.map(colDef => columnView(colDef, matches)))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
 }
 
@@ -94,6 +100,12 @@ $('import').onchange = async e => {
   } catch (err) {
     $('status').textContent = `Import failed: ${err.message}`
   }
+}
+
+$('search').value = ''
+$('search').oninput = e => {
+  query = e.target.value
+  render()
 }
 
 render()
