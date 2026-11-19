@@ -3,6 +3,36 @@ const IDS = COLUMNS.map(([id]) => id)
 
 export const emptyBoard = () => ({ nextId: 1, columns: { todo: [], doing: [], done: [] } })
 
+export function createHistory(board) {
+  return { past: [], present: board, future: [] }
+}
+
+export function record(history, action) {
+  const next = applyAction(history.present, action)
+  if (action.type === 'import') {
+    return { past: [], present: next, future: [] }
+  }
+  const past = [...history.past, history.present]
+  if (past.length > 50) past.shift()
+  return { past, present: next, future: [] }
+}
+
+export function undo(history) {
+  if (history.past.length === 0) throw new Error('nothing to undo')
+  const previous = history.past[history.past.length - 1]
+  const past = history.past.slice(0, -1)
+  const future = [history.present, ...history.future]
+  return { past, present: previous, future }
+}
+
+export function redo(history) {
+  if (history.future.length === 0) throw new Error('nothing to redo')
+  const next = history.future[0]
+  const future = history.future.slice(1)
+  const past = [...history.past, history.present]
+  return { past, present: next, future }
+}
+
 export function findCard(board, id) {
   for (const col of IDS) {
     const index = board.columns[col].findIndex(c => c.id === id)

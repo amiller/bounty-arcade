@@ -1,4 +1,4 @@
-import { COLUMNS, applyAction, emptyBoard, neighbour } from './logic.js'
+import { COLUMNS, emptyBoard, neighbour, createHistory, record, undo, redo } from './logic.js'
 
 const $ = id => document.getElementById(id)
 function el(tag, { dataset = {}, ...props } = {}, ...kids) {
@@ -18,6 +18,7 @@ const db = await new Promise((ok, fail) => {
 const store = mode => db.transaction('kv', mode).objectStore('kv')
 
 let board = (await req(store('readonly').get('board'))) ?? emptyBoard()
+let history = createHistory(board)
 let editing = null
 let saves = 0
 
@@ -29,7 +30,15 @@ async function save() {
 }
 
 function dispatch(action) {
-  board = applyAction(board, action)
+  history = record(history, action)
+  board = history.present
+  render()
+  return save()
+}
+
+function stepHistory(fn) {
+  history = fn(history)
+  board = history.present
   render()
   return save()
 }
@@ -77,6 +86,8 @@ function render() {
   const focused = document.activeElement?.dataset?.testid
   $('board').replaceChildren(...COLUMNS.map(columnView))
   if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
+  $('undo').disabled = history.past.length === 0
+  $('redo').disabled = history.future.length === 0
 }
 
 $('export').onclick = () => {
@@ -95,6 +106,25 @@ $('import').onchange = async e => {
     $('status').textContent = `Import failed: ${err.message}`
   }
 }
+
+$('undo').onclick = () => {
+  if (history.past.length > 0) stepHistory(undo)
+}
+$('redo').onclick = () => {
+  if (history.future.length > 0) stepHistory(redo)
+}
+
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea')) return
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault()
+    if (e.shiftKey) {
+      if (history.future.length > 0) stepHistory(redo)
+    } else {
+      if (history.past.length > 0) stepHistory(undo)
+    }
+  }
+})
 
 render()
 $('board').dataset.ready = 'true'
