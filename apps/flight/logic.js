@@ -95,3 +95,44 @@ export function step(state, input, dt) {
   if (y <= terrainAt(s.level, x)) s.status = 'crashed'
   return s
 }
+
+export function encodeRun(seed, inputs) {
+  let out = `${seed}_`
+  if (!inputs || inputs.length === 0) return out
+  const toIdx = inp => ((inp.pitch ?? 0) + 1) * 3 + ((inp.throttle ?? 0) + 1)
+  let curIdx = toIdx(inputs[0])
+  let count = 1
+  for (let i = 1; i < inputs.length; i++) {
+    const idx = toIdx(inputs[i])
+    if (idx === curIdx) {
+      count++
+    } else {
+      out += String.fromCharCode(65 + curIdx) + count.toString(36)
+      curIdx = idx
+      count = 1
+    }
+  }
+  out += String.fromCharCode(65 + curIdx) + count.toString(36)
+  return out
+}
+
+export function decodeRun(str) {
+  const [seedStr, runsStr = ''] = str.split('_')
+  const seed = Number(seedStr)
+  const inputs = []
+  for (const m of runsStr.matchAll(/([A-I])([0-9a-z]+)/g)) {
+    const idx = m[1].charCodeAt(0) - 65
+    const count = parseInt(m[2], 36)
+    const pitch = Math.floor(idx / 3) - 1
+    const throttle = (idx % 3) - 1
+    for (let i = 0; i < count; i++) {
+      inputs.push({ pitch, throttle })
+    }
+  }
+  return { seed, inputs }
+}
+
+export function replay(seed, inputs, dt = 1 / 60) {
+  return inputs.reduce((s, inp) => step(s, inp, dt), initialState(makeLevel(seed)))
+}
+

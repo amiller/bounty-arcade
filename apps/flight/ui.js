@@ -1,4 +1,4 @@
-import { makeLevel, initialState, step, terrainAt } from './logic.js'
+import { makeLevel, initialState, step, terrainAt, encodeRun, decodeRun } from './logic.js'
 
 const DT = 1 / 60
 const VIEW_H = 220
@@ -8,28 +8,42 @@ const keys = new Set()
 const bindings = { ArrowUp: ['pitch', 1], KeyW: ['pitch', 1], ArrowDown: ['pitch', -1], KeyS: ['pitch', -1],
   ArrowRight: ['throttle', 1], KeyD: ['throttle', 1], ArrowLeft: ['throttle', -1], KeyA: ['throttle', -1] }
 let state, acc = 0, last = performance.now()
+let recorded = []
+let replayInputs = null
+let replayIndex = 0
 
-function restart() {
-  state = initialState(makeLevel(Number($('seed').value)))
+function restart(seedVal = Number($('seed').value), replayList = null) {
+  $('seed').value = seedVal
+  replayInputs = replayList
+  replayIndex = 0
+  recorded = []
+  state = initialState(makeLevel(seedVal))
   acc = 0
+  $('share').href = `?run=${encodeRun(seedVal, [])}`
 }
 
 function input() {
+  if (replayInputs) {
+    return replayInputs[replayIndex++] || { pitch: 0, throttle: 0 }
+  }
   const out = { pitch: 0, throttle: 0 }
   for (const k of keys) out[bindings[k][0]] += bindings[k][1]
+  out.pitch = Math.max(-1, Math.min(1, out.pitch))
+  out.throttle = Math.max(-1, Math.min(1, out.throttle))
   return out
 }
 
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return
-  if (e.code === 'KeyR') return restart()
+  if (e.code === 'KeyR') return restart(Number($('seed').value), null)
   if (!bindings[e.code]) return
   e.preventDefault()
   keys.add(e.code)
 })
 addEventListener('keyup', e => keys.delete(e.code))
 addEventListener('blur', () => keys.clear())
-$('level-form').addEventListener('submit', e => { e.preventDefault(); restart(); $('restart').blur() })
+$('level-form').addEventListener('submit', e => { e.preventDefault(); restart(Number($('seed').value), null); $('restart').blur() })
+
 
 function draw() {
   const W = canvas.clientWidth * devicePixelRatio, H = canvas.clientHeight * devicePixelRatio
@@ -101,16 +115,34 @@ function hud() {
   $('status').textContent = state.status
   $('stall').classList.toggle('on', state.stalled)
   canvas.dataset.status = state.status
+  $('share').href = `?run=${encodeRun(Number($('seed').value), recorded)}`
 }
 
 function frame(now) {
   acc += Math.min(now - last, 100) / 1000
   last = now
-  for (; acc >= DT; acc -= DT) state = step(state, input(), DT)
+  for (; acc >= DT; acc -= DT) {
+    if (state.status === 'flying') {
+      const inp = input()
+      recorded.push(inp)
+      state = step(state, inp, DT)
+    }
+  }
   draw()
   hud()
   requestAnimationFrame(frame)
 }
 
-restart()
+const runParam = new URLSearchParams(location.search).get('run')
+if (runParam) {
+  try {
+    const { seed, inputs } = decodeRun(runParam)
+    restart(seed, inputs)
+  } catch {
+    restart()
+  }
+} else {
+  restart()
+}
 requestAnimationFrame(frame)
+
