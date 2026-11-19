@@ -25,6 +25,24 @@ export const moves = state => state.history.length
 export const pushes = state => state.history.filter(m => m === m.toUpperCase()).length
 export const isWon = state => state.boxes.every(b => state.goals.has(b))
 
+// Returns sorted indices of boxes trapped in a non-goal corner (wall on one vertical and one horizontal side).
+export function deadBoxes(state) {
+  const { w, walls, goals, boxes } = state
+  const dead = []
+  for (const b of boxes) {
+    if (goals.has(b)) continue
+    const x = b % w, y = Math.floor(b / w)
+    const up = (y - 1) * w + x
+    const down = (y + 1) * w + x
+    const left = y * w + (x - 1)
+    const right = y * w + (x + 1)
+    const hasVert = walls.has(up) || walls.has(down)
+    const hasHoriz = walls.has(left) || walls.has(right)
+    if (hasVert && hasHoriz) dead.push(b)
+  }
+  return dead.sort((a, b) => a - b)
+}
+
 // Returns the same state object when the move is blocked.
 export function move(state, dir) {
   const d = DIRS[dir]
