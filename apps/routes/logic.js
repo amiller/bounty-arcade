@@ -30,12 +30,15 @@ export function profile(points) {
   return points.map((p, i) => ({ d: d += i ? haversine(points[i - 1], p) : 0, ele: p.ele }))
 }
 
-export function stats(points) {
+// Gain/loss with hysteresis: a climb (dir 1) or descent (dir -1) counts once elevation moves at least
+// threshold from the last turning point ext, then every further step the same way extends it.
+// threshold 0 sums every step, i.e. the raw totals.
+export function stats(points, { threshold = 0 } = {}) {
   const eles = points.map(p => p.ele).filter(e => e !== null)
-  let gain = 0, loss = 0
-  for (let i = 1; i < eles.length; i++) {
-    const dz = eles[i] - eles[i - 1]
-    if (dz > 0) gain += dz; else loss -= dz
+  let gain = 0, loss = 0, dir = 0, ext = eles[0]
+  for (const e of eles.slice(1)) {
+    if (dir === 1 ? e > ext : e - ext >= threshold) { gain += e - ext; dir = 1; ext = e }
+    else if (dir === -1 ? e < ext : ext - e >= threshold) { loss += ext - e; dir = -1; ext = e }
   }
   const lats = points.map(p => p.lat), lons = points.map(p => p.lon)
   return {

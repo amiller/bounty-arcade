@@ -57,6 +57,25 @@ test('gain and loss on synthetic tracks', () => {
   assert.deepEqual([none.gain, none.minEle, none.maxEle], [0, null, null])
 })
 
+test('gain and loss threshold applies hysteresis', () => {
+  const gl = (eles, threshold) => { const s = stats(track(eles), { threshold }); return [s.gain, s.loss] }
+  assert.deepEqual(gl([100, 150, 120, 200], 0), [130, 30])
+  assert.deepEqual(gl([100, 101, 100, 101, 100], 2), [0, 0])
+  assert.deepEqual(gl([100, 101, 100, 105, 104, 110], 2), [10, 0])
+  assert.deepEqual(gl([200, 190, 191, 180], 3), [0, 20])
+  assert.deepEqual(gl([100, 103, 104, 102], 2), [4, 2])
+  assert.deepEqual(gl([100, 102, 100], 2), [2, 2])
+  assert.deepEqual(gl([10, null, 13, 11], 2), [3, 2])
+  assert.deepEqual(gl([null, null], 2), [0, 0])
+  for (const f of ['alpine-climb.gpx', 'riverside-loop.gpx']) {
+    const raw = stats(sample(f).points), zero = stats(sample(f).points, { threshold: 0 })
+    assert.deepEqual([zero.gain, zero.loss], [raw.gain, raw.loss])
+  }
+  const s = stats(sample('riverside-loop.gpx').points, { threshold: 1 })
+  assert.ok(s.gain < 50, `gain ${s.gain}`)
+  assert.ok(Math.abs(s.gain - s.loss) < 1, `gain ${s.gain} loss ${s.loss}`)
+})
+
 test('sample elevation stats and bbox', () => {
   const s = stats(sample('riverside-loop.gpx').points)
   near(s.gain, s.loss, 1e-9)
