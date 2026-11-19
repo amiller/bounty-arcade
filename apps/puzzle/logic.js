@@ -25,6 +25,18 @@ export const moves = state => state.history.length
 export const pushes = state => state.history.filter(m => m === m.toUpperCase()).length
 export const isWon = state => state.boxes.every(b => state.goals.has(b))
 
+// Pure function returning updated progress object tracking lowest move count per level.
+export function recordWin(progress, levelName, moves) {
+  const current = progress?.[levelName]?.best
+  const best = current != null ? Math.min(current, moves) : moves
+  return {
+    ...progress,
+    [levelName]: {
+      best,
+    },
+  }
+}
+
 // Returns the same state object when the move is blocked.
 export function move(state, dir) {
   const d = DIRS[dir]
