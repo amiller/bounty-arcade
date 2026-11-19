@@ -33,19 +33,28 @@ function drawProfile(points, s) {
   )
 }
 
-function show(text, label) {
-  $('error').textContent = ''
-  const { name, points } = parseGpx(text)
-  const s = stats(points)
-  $('route-name').textContent = name ?? label
+let currentPoints = null
+
+function updateStats() {
+  if (!currentPoints) return
+  const threshold = Math.max(0, Number($('threshold')?.value) || 0)
+  const s = stats(currentPoints, { threshold })
   $('stat-distance').textContent = formatKm(s.distance)
   $('stat-gain').textContent = formatM(s.gain)
   $('stat-loss').textContent = formatM(s.loss)
   $('stat-min').textContent = formatM(s.minEle)
   $('stat-max').textContent = formatM(s.maxEle)
   $('stat-count').textContent = s.count
+  drawProfile(currentPoints, s)
+}
+
+function show(text, label) {
+  $('error').textContent = ''
+  const { name, points } = parseGpx(text)
+  currentPoints = points
+  $('route-name').textContent = name ?? label
   drawTrack(points)
-  drawProfile(points, s)
+  updateStats()
 }
 
 const report = e => { $('error').textContent = e.message; throw e }
@@ -57,6 +66,8 @@ async function loadSample() {
 }
 
 $('sample').addEventListener('change', () => loadSample().catch(report))
+$('threshold').addEventListener('input', updateStats)
+$('threshold').addEventListener('change', updateStats)
 $('file').addEventListener('change', async () => {
   const f = $('file').files[0]
   await f.text().then(t => show(t, f.name.replace(/\.gpx$/i, ''))).catch(report)
