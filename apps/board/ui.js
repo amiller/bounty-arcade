@@ -35,6 +35,7 @@ function dispatch(action) {
 }
 
 function cardView(col, card, index, count) {
+  const doingFull = Boolean(board.limits?.doing && board.columns.doing.length >= board.limits.doing)
   const btn = (label, action, onclick, disabled = false) => el('button', { textContent: label, title: action, onclick, disabled, type: 'button', dataset: { action } })
   const li = el('li', { className: 'card', draggable: true, dataset: { testid: 'card', id: card.id } })
   li.ondragstart = e => e.dataTransfer.setData('text/plain', card.id)
@@ -47,11 +48,13 @@ function cardView(col, card, index, count) {
     queueMicrotask(() => input.focus())
   } else li.append(el('p', { textContent: card.text }))
   const left = neighbour(col, -1), right = neighbour(col, 1)
+  const disableLeft = !left || (left === 'doing' && doingFull)
+  const disableRight = !right || (right === 'doing' && doingFull)
   li.append(el('div', { className: 'tools' },
-    btn('←', 'left', () => dispatch({ type: 'move', id: card.id, to: left }), !left),
+    btn('←', 'left', () => dispatch({ type: 'move', id: card.id, to: left }), disableLeft),
     btn('↑', 'up', () => dispatch({ type: 'move', id: card.id, to: col, index: index - 1 }), index === 0),
     btn('↓', 'down', () => dispatch({ type: 'move', id: card.id, to: col, index: index + 1 }), index === count - 1),
-    btn('→', 'right', () => dispatch({ type: 'move', id: card.id, to: right }), !right),
+    btn('→', 'right', () => dispatch({ type: 'move', id: card.id, to: right }), disableRight),
     btn('Edit', 'edit', () => { editing = card.id; render() }),
     btn('Delete', 'delete', () => dispatch({ type: 'delete', id: card.id })),
   ))
@@ -60,24 +63,57 @@ function cardView(col, card, index, count) {
 
 function columnView([col, title]) {
   const cards = board.columns[col]
-  const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', dataset: { testid: `new-${col}` } })
+  const isDoing = col === 'doing'
+  const doingFull = isDoing && Boolean(board.limits?.doing && cards.length >= board.limits.doing)
+  const input = el('input', { placeholder: 'Add a card', required: true, pattern: '.*\\S.*', disabled: doingFull, dataset: { testid: `new-${col}` } })
   const form = el('form', { onsubmit: e => { e.preventDefault(); dispatch({ type: 'add', column: col, text: input.value }) } },
-    input, el('button', { textContent: 'Add', dataset: { testid: `add-${col}` } }))
+    input, el('button', { textContent: 'Add', disabled: doingFull, dataset: { testid: `add-${col}` } }))
+  const limitInput = isDoing ? el('input', {
+    type: 'number',
+    min: 1,
+    placeholder: 'Limit',
+    value: board.limits?.doing ?? '',
+    dataset: { testid: 'limit-doing' },
+    oninput: e => {
+      const val = e.target.value.trim()
+      if (val === '') {
+        dispatch({ type: 'setLimit', column: 'doing', limit: null })
+        $('status').textContent = ''
+      } else {
+        const n = Number(val)
+        if (Number.isInteger(n) && n >= 1) {
+          try {
+            dispatch({ type: 'setLimit', column: 'doing', limit: n })
+            $('status').textContent = ''
+          } catch (err) {
+            $('status').textContent = err.message
+          }
+        }
+      }
+    }
+  }) : null
   const section = el('section', { className: 'column', dataset: { testid: `column-${col}`, column: col } },
-    el('h2', {}, title, el('span', { textContent: cards.length })),
+    el('h2', {}, title, ...(limitInput ? [limitInput] : []), el('span', { textContent: cards.length })),
     el('ol', {}, ...cards.map((card, i) => cardView(col, card, i, cards.length))),
     form)
   section.ondragover = e => { e.preventDefault(); section.classList.add('over') }
   section.ondragleave = () => section.classList.remove('over')
-  section.ondrop = e => { e.preventDefault(); dispatch({ type: 'move', id: e.dataTransfer.getData('text/plain'), to: col }) }
+  section.ondrop = e => {
+    e.preventDefault()
+    if (doingFull) return
+    dispatch({ type: 'move', id: e.dataTransfer.getData('text/plain'), to: col })
+  }
   return section
 }
 
 function render() {
   const focused = document.activeElement?.dataset?.testid
   $('board').replaceChildren(...COLUMNS.map(columnView))
-  if (focused?.startsWith('new-')) document.querySelector(`[data-testid="${focused}"]`).focus()
+  if (focused?.startsWith('new-') || focused === 'limit-doing') {
+    document.querySelector(`[data-testid="${focused}"]`)?.focus()
+  }
 }
+
 
 $('export').onclick = () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' }))
