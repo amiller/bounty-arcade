@@ -1,4 +1,4 @@
-import { parse, move, undo, isWon, moves, pushes, interior } from './logic.js'
+import { parse, move, undo, isWon, moves, pushes, interior, replayUrl, parseReplay } from './logic.js'
 
 const levels = await (await fetch('levels.json')).json()
 const $ = id => document.getElementById(id)
@@ -38,6 +38,28 @@ function step(dir) {
   draw()
 }
 
+function applyReplay() {
+  if (!location.hash) return false
+  try {
+    const { level, moves: lurd } = parseReplay(location.hash)
+    if (level < 0 || level >= levels.length) return false
+    load(level)
+    for (const c of lurd) {
+      const next = move(state, c.toLowerCase())
+      if (next === state) {
+        $('status').textContent = `Blocked move '${c}' at step ${moves(state)}`
+        return true
+      }
+      state = next
+    }
+    draw()
+    return true
+  } catch {
+    $('status').textContent = 'Invalid replay link'
+    return false
+  }
+}
+
 document.addEventListener('keydown', e => {
   if (e.target === select) return
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
@@ -53,4 +75,16 @@ $('undo').addEventListener('click', () => { state = undo(state); draw() })
 $('restart').addEventListener('click', () => load(+select.value))
 select.addEventListener('change', () => { load(+select.value); select.blur() })
 
-load(0)
+$('share').addEventListener('click', () => {
+  const hash = replayUrl(+select.value, state)
+  const url = location.origin + location.pathname + hash
+  $('share-url').value = url
+  try { navigator.clipboard.writeText(url) } catch {}
+})
+
+window.addEventListener('hashchange', applyReplay)
+
+if (!applyReplay()) {
+  load(0)
+}
+
