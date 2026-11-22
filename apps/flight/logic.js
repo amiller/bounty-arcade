@@ -95,3 +95,50 @@ export function step(state, input, dt) {
   if (y <= terrainAt(s.level, x)) s.status = 'crashed'
   return s
 }
+
+
+// Version 1: base-36 seed, followed by control/count runs. Each control is one
+// digit (pitch + 1) * 3 + throttle + 1; counts are positive base-36 integers.
+const MAX_RUN_STEPS = 1000000
+const validControl = input => input && [-1, 0, 1].includes(input.pitch) && [-1, 0, 1].includes(input.throttle)
+const badRun = () => { throw new Error('invalid run') }
+
+export function encodeRun(seed, inputs) {
+  if (!Number.isSafeInteger(seed) || !Array.isArray(inputs) || inputs.length > MAX_RUN_STEPS) badRun()
+  const runs = []
+  let previous, count = 0
+  for (const input of inputs) {
+    if (!validControl(input)) badRun()
+    const code = (input.pitch + 1) * 3 + input.throttle + 1
+    if (code === previous) count++
+    else {
+      if (count) runs.push(previous.toString() + count.toString(36))
+      previous = code
+      count = 1
+    }
+  }
+  if (count) runs.push(previous.toString() + count.toString(36))
+  return '1_' + seed.toString(36) + '_' + runs.join('_')
+}
+
+export function decodeRun(str) {
+  if (typeof str !== 'string' || !/^[A-Za-z0-9_-]+$/.test(str)) badRun()
+  const [version, encodedSeed, ...runs] = str.split('_')
+  if (version !== '1' || !/^-?[0-9a-z]+$/.test(encodedSeed ?? '')) badRun()
+  const seed = parseInt(encodedSeed, 36)
+  if (!Number.isSafeInteger(seed) || seed.toString(36) !== encodedSeed || !runs.length) badRun()
+  const inputs = []
+  if (runs.length === 1 && runs[0] === '') return { seed, inputs }
+  for (const run of runs) {
+    if (!/^[0-8][0-9a-z]+$/.test(run)) badRun()
+    const code = Number(run[0]), count = parseInt(run.slice(1), 36)
+    // Bound expansion of untrusted URL data before allocating it.
+    if (!Number.isSafeInteger(count) || count < 1 || count.toString(36) !== run.slice(1) || inputs.length + count > MAX_RUN_STEPS) badRun()
+    for (let i = 0; i < count; i++) inputs.push({ pitch: Math.floor(code / 3) - 1, throttle: code % 3 - 1 })
+  }
+  return { seed, inputs }
+}
+
+export function replay(seed, inputs, dt) {
+  return inputs.reduce((state, input) => step(state, input, dt), initialState(makeLevel(seed)))
+}

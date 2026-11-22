@@ -30,12 +30,14 @@
   <header>
     <h1>Flight</h1>
     <a href="../../">All apps</a>
+    <a id="share" data-testid="share" href="?run=1_1_">Share this run</a>
     <form id="level-form">
       <label for="seed">Seed</label>
       <input id="seed" data-testid="seed" type="number" value="1">
       <button id="restart" data-testid="restart" type="submit">Restart</button>
     </form>
   </header>
+  <p id="replay-error" role="alert"></p>
   <canvas id="game" data-testid="game" width="960" height="480"></canvas>
   <div id="hud" data-testid="hud">
     <span>Gates <b id="score" data-testid="score">0/0</b></span>
