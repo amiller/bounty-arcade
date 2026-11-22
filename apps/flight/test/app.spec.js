@@ -1,5 +1,35 @@
 import { test, expect } from '@playwright/test'
 
+test('fuel burns with throttle, stays fixed at idle, and resets on restart', async ({ page }) => {
+  const errors = []
+  page.on('console', m => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', e => errors.push(e.message))
+  await page.goto('/apps/flight/')
+  const fuel = page.getByTestId('fuel')
+  const throttle = page.getByTestId('throttle')
+  await expect(fuel).toHaveText('100%')
+  const before = parseInt(await fuel.textContent())
+  await page.keyboard.down('ArrowRight')
+  await page.waitForTimeout(1000)
+  await page.keyboard.up('ArrowRight')
+  await page.waitForTimeout(3000)
+  const burned = parseInt(await fuel.textContent())
+  expect(burned).toBeLessThan(before)
+  expect(burned).toBeGreaterThanOrEqual(0)
+  await page.keyboard.down('ArrowLeft')
+  await expect(throttle).toHaveText('0%')
+  await page.waitForTimeout(150)
+  await page.keyboard.up('ArrowLeft')
+  await expect(page.getByTestId('game')).toHaveAttribute('data-status', 'flying')
+  const idle = await fuel.textContent()
+  await page.waitForTimeout(3000)
+  await expect(page.getByTestId('game')).toHaveAttribute('data-status', 'flying')
+  await expect(fuel).toHaveText(idle)
+  await page.getByTestId('restart').click()
+  await expect(fuel).toHaveText('100%')
+  expect(errors).toEqual([])
+})
+
 test('flight loads, flies, and responds to throttle', async ({ page }) => {
   const errors = []
   page.on('console', m => m.type() === 'error' && errors.push(m.text()))

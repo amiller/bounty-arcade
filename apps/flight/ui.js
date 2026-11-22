@@ -72,7 +72,7 @@ function draw() {
   ctx.rotate(-state.pitch)
   ctx.scale(scale * 1.5, -scale * 1.5)
   ctx.fillStyle = '#ff8c1a'
-  ctx.beginPath(); ctx.moveTo(-6, -0.6); ctx.lineTo(-6 - 6 * state.throttle, 0); ctx.lineTo(-6, 0.6); ctx.fill()
+  ctx.beginPath(); ctx.moveTo(-6, -0.6); ctx.lineTo(-6 - 6 * (state.fuel > 0 ? state.throttle : 0), 0); ctx.lineTo(-6, 0.6); ctx.fill()
   ctx.fillStyle = state.status === 'crashed' ? '#333' : '#f4f4f4'
   ctx.strokeStyle = '#222'
   ctx.lineWidth = 0.3
@@ -98,6 +98,7 @@ function hud() {
   $('speed').textContent = Math.hypot(state.vx, state.vy).toFixed(0)
   $('altitude').textContent = (state.y - terrainAt(state.level, state.x)).toFixed(0)
   $('throttle').textContent = `${Math.round(state.throttle * 100)}%`
+  $('fuel').textContent = `${Math.round(state.fuel * 100)}%`
   $('status').textContent = state.status
   $('stall').classList.toggle('on', state.stalled)
   canvas.dataset.status = state.status
