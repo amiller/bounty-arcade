@@ -33,6 +33,21 @@ test('rejects GPX without points or with bad coordinates', () => {
   assert.throws(() => parseGpx('<trkpt lat="x" lon="1"/>'), /bad trkpt/)
 })
 
+test('parses trkseg blocks into segments', () => {
+  const g = parseGpx(`<gpx><trk><trkseg><trkpt lat="0" lon="0"/><trkpt lat="0" lon="1"/></trkseg><trkseg><trkpt lat="5" lon="5"/></trkseg></trk></gpx>`)
+  assert.deepEqual(g.segments, [[{ lat: 0, lon: 0, ele: null }, { lat: 0, lon: 1, ele: null }], [{ lat: 5, lon: 5, ele: null }]])
+  assert.deepEqual(g.points, g.segments.flat())
+  assert.equal(sample('alpine-climb.gpx').segments.length, 1)
+})
+
+test('stats with segments skips gaps', () => {
+  const a = track([100, 110]), b = track([500, 490]).map(p => ({ ...p, lat: 1 }))
+  const s = stats([...a, ...b], { segments: [a, b] })
+  assert.deepEqual([s.gain, s.loss, s.count], [10, 10, 4])
+  near(s.distance, haversine(a[0], a[1]) + haversine(b[0], b[1]), 1e-9)
+  assert.deepEqual(profile([...a, ...b], [a, b]).map(x => x.ele), [100, 110, 500, 490])
+})
+
 test('haversine matches known distances', () => {
   near(haversine({ lat: 0, lon: 0 }, { lat: 1, lon: 0 }), EARTH_RADIUS_M * Math.PI / 180, 1e-6)
   near(haversine({ lat: 0, lon: 0 }, { lat: 0, lon: 180 }), EARTH_RADIUS_M * Math.PI, 1e-6)

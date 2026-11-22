@@ -11,19 +11,20 @@ function el(name, attrs, text) {
   return e
 }
 
-function drawTrack(points) {
+function drawTrack(points, segments) {
   const xy = project(points, 600, 400, 20)
+  let i = 0
   $('track').replaceChildren(
-    el('polyline', { points: pts(xy) }),
+    ...segments.map(seg => el('polyline', { points: pts(xy.slice(i, i += seg.length)) })),
     el('circle', { class: 'start', cx: xy[0][0], cy: xy[0][1], r: 6 }),
     el('circle', { class: 'end', cx: xy.at(-1)[0], cy: xy.at(-1)[1], r: 4 }),
   )
 }
 
-function drawProfile(points, s) {
+function drawProfile(points, segments, s) {
   const svg = $('profile')
   if (s.minEle === null) return svg.replaceChildren(el('text', { class: 'axis', x: 300, y: 85, 'text-anchor': 'middle' }, 'No elevation data'))
-  const prof = profile(points), xy = profileCoords(prof, 600, 160, 16)
+  const prof = profile(points, segments), xy = profileCoords(prof, 600, 160, 16)
   svg.replaceChildren(
     el('polygon', { points: pts([[xy[0][0], 144], ...xy, [xy.at(-1)[0], 144]]) }),
     el('polyline', { points: pts(xy) }),
@@ -35,8 +36,8 @@ function drawProfile(points, s) {
 
 function show(text, label) {
   $('error').textContent = ''
-  const { name, points } = parseGpx(text)
-  const s = stats(points)
+  const { name, points, segments } = parseGpx(text)
+  const s = stats(points, { segments })
   $('route-name').textContent = name ?? label
   $('stat-distance').textContent = formatKm(s.distance)
   $('stat-gain').textContent = formatM(s.gain)
@@ -44,8 +45,8 @@ function show(text, label) {
   $('stat-min').textContent = formatM(s.minEle)
   $('stat-max').textContent = formatM(s.maxEle)
   $('stat-count').textContent = s.count
-  drawTrack(points)
-  drawProfile(points, s)
+  drawTrack(points, segments)
+  drawProfile(points, segments, s)
 }
 
 const report = e => { $('error').textContent = e.message; throw e }
