@@ -83,3 +83,22 @@ export function render(state) {
   }
   return rows
 }
+
+
+export function replayUrl(levelIndex, state) {
+  if (!Number.isSafeInteger(levelIndex) || levelIndex < 0 ||
+      !Array.isArray(state?.history) || !state.history.every(c => typeof c === 'string' && /^[udlr]$/i.test(c)))
+    throw new Error('invalid replay state or level')
+  return '#level=' + levelIndex + '&moves=' + state.history.join('')
+}
+
+export function parseReplay(hash) {
+  if (typeof hash !== 'string' || !hash.startsWith('#')) throw new Error('invalid replay hash')
+  const params = new URLSearchParams(hash.slice(1))
+  const levelText = params.get('level'), moves = params.get('moves')
+  if ([...params].length !== 2 || params.getAll('level').length !== 1 || params.getAll('moves').length !== 1 ||
+      !/^(0|[1-9][0-9]*)$/.test(levelText ?? '') || !Number.isSafeInteger(Number(levelText)) ||
+      moves === null || !/^[udlr]*$/i.test(moves))
+    throw new Error('invalid replay parameters')
+  return { level: Number(levelText), moves }
+}
