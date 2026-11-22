@@ -45,6 +45,7 @@ export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, f
     const ground = Math.max(...[-30, 0, 30].map(d => terrainAt(level, x + d)))
     level.gates.push({ x, y: ground + gap / 2 + 20 + rng() * 60, gap })
   }
+  level.wind = rng() * 24 - 12
   return level
 }
 
@@ -56,17 +57,19 @@ export function terrainAt({ spacing, terrain }, x) {
 
 export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
   const { pitch, throttle } = trim(speed)
-  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
+  // Start at the requested airspeed; wind changes only ground velocity.
+  return { level, t: 0, x, y, vx: speed + (level.wind ?? 0), vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
 }
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
-  const v = Math.hypot(vx, vy)
-  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
+export function forces({ vx, vy, pitch, throttle, level }) {
+  const airVx = vx - (level?.wind ?? 0)
+  const v = Math.hypot(airVx, vy)
+  const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, airVx)), Math.cos(pitch - Math.atan2(vy, airVx)))
   const q = K * v * v
   const lift = q * cl(alpha), drag = q * cd(alpha), thrust = throttle * T_MAX
-  const ux = v ? vx / v : 0, uy = v ? vy / v : 0
+  const ux = v ? airVx / v : 0, uy = v ? vy / v : 0
   return {
     alpha, lift,
     ax: thrust * Math.cos(pitch) - drag * ux - lift * uy,
