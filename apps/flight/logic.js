@@ -45,6 +45,8 @@ export function makeLevel(seed, { gates = 12, spacing = 10, gateSpacing = 250, f
     const ground = Math.max(...[-30, 0, 30].map(d => terrainAt(level, x + d)))
     level.gates.push({ x, y: ground + gap / 2 + 20 + rng() * 60, gap })
   }
+  // Draw after terrain and gates to preserve existing seeded geometry.
+  level.wind = rng() * 24 - 12
   return level
 }
 
@@ -56,12 +58,14 @@ export function terrainAt({ spacing, terrain }, x) {
 
 export function initialState(level, { x = 0, y = 120, speed = CRUISE } = {}) {
   const { pitch, throttle } = trim(speed)
-  return { level, t: 0, x, y, vx: speed, vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
+  return { level, t: 0, x, y, vx: speed + (level.wind ?? 0), vy: 0, pitch, throttle, stalled: false, score: 0, next: 0, results: [], status: 'flying' }
 }
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
 
-export function forces({ vx, vy, pitch, throttle }) {
+export function forces({ vx, vy, pitch, throttle, level }) {
+  // State velocity is ground-relative; aerodynamics use air-relative velocity.
+  vx -= level?.wind ?? 0
   const v = Math.hypot(vx, vy)
   const alpha = Math.atan2(Math.sin(pitch - Math.atan2(vy, vx)), Math.cos(pitch - Math.atan2(vy, vx)))
   const q = K * v * v
